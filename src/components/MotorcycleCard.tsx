@@ -79,9 +79,9 @@ export default function MotorcycleCard({
 
   const formatPrice = (usd: number) => {
     if (lang === 'ar') {
-      return `${(usd * 50).toLocaleString()} جنيه`;
+      return `${usd.toLocaleString()} جنيه`;
     } else {
-      return `${(usd * 50).toLocaleString()} EGP`;
+      return `${usd.toLocaleString()} EGP`;
     }
   };
 
@@ -291,6 +291,24 @@ Total Price: ${formattedTotal}`;
             </div>
           )}
 
+          {/* Reservation / Sold Badges on Card */}
+          {bike.isSold && (
+            <div className={`absolute top-28 ${dir === 'rtl' ? 'right-4' : 'left-4'} z-20 flex items-center gap-1.5 px-3 py-1 bg-red-600/90 border border-red-500 rounded-xl shadow-lg`}>
+              <span className="w-2 h-2 rounded-full bg-red-400 animate-ping" />
+              <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-white leading-none">
+                {lang === 'ar' ? 'مباع 🔴' : 'SOLD 🔴'}
+              </span>
+            </div>
+          )}
+          {!bike.isSold && bike.isReserved && (!bike.reservationExpiry || new Date(bike.reservationExpiry).getTime() > Date.now()) && (
+            <div className={`absolute top-28 ${dir === 'rtl' ? 'right-4' : 'left-4'} z-20 flex items-center gap-1.5 px-2.5 py-1 bg-yellow-600 border border-yellow-500 rounded-xl shadow-lg`}>
+              <span className="w-2 h-2 rounded-full bg-yellow-300 animate-pulse" />
+              <span className="text-[8.5px] font-mono font-bold uppercase tracking-wider text-white leading-none">
+                {lang === 'ar' ? 'محجوز مؤقتاً ' : 'RESERVED '}
+              </span>
+            </div>
+          )}
+
           {/* Product Thumbnail block */}
           <div className="w-full h-[240px] relative overflow-hidden bg-gradient-to-b from-[#111827]/10 to-[#070A11]/30">
             {/* Visual background atmospheric halo strip */}
@@ -344,10 +362,13 @@ Total Price: ${formattedTotal}`;
               </div>
 
               {/* Tap to flip action indicator */}
-              <div className="flex items-center gap-1.5 py-1.5 px-3 bg-white/[0.03] border border-white/5 rounded-xl font-mono text-[9px] text-gray-400 group-hover:text-white transition-colors">
+              <button 
+                onClick={(e) => { e.stopPropagation(); setIsFlipped(true); setBackTab('specs'); }}
+                className="flex items-center gap-1.5 py-1.5 px-3 bg-white/[0.03] border border-white/5 rounded-xl font-mono text-[9px] text-gray-400 hover:text-white transition-colors no-flip"
+              >
                 <RefreshCw className="w-3 h-3 text-brand-accent animate-spin-slow" />
                 <span>{t('explore_specs').toUpperCase()}</span>
-              </div>
+              </button>
             </div>
           </div>
 
@@ -379,10 +400,12 @@ Total Price: ${formattedTotal}`;
               </button>
 
               <button 
-                onClick={(e) => { e.stopPropagation(); handleCardClick(e); }}
-                className="p-1 px-2.5 rounded-lg border border-white/10 bg-white/5 font-mono text-[9px] text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+                onClick={(e) => { e.stopPropagation(); setIsFlipped(false); }}
+                className="p-1 px-2 rounded-lg border border-white/10 bg-white/5 font-mono text-[9px] text-gray-400 hover:text-white hover:bg-white/10 transition-colors flex items-center gap-1 cursor-pointer"
+                title={t('flip_back')}
               >
-                {t('flip_back')}
+                <X className="w-3 h-3" />
+                <span>{t('flip_back')}</span>
               </button>
             </div>
           </div>
@@ -429,8 +452,9 @@ Total Price: ${formattedTotal}`;
 
                 {/* Deep details paragraph in back side */}
                 <div className="col-span-2 p-2.5 bg-black/40 border border-white/[0.05] rounded-xl font-sans text-[11px] text-gray-400 leading-relaxed overflow-y-auto max-h-[140px] text-right" dir={dir}>
-                  <p className="font-semibold text-white font-mono text-[9px] mb-1 text-left uppercase" dir="ltr">{t('craft_manifesto')}</p>
-                  {bike.longDesc}
+                  <p className="font-semibold text-white font-mono text-[9px] mb-1 text-left uppercase" dir="ltr">{bike.name}</p>
+                  <p className="text-gray-300">{bike.shortDesc}</p>
+                  <div className="mt-2 pt-2 border-t border-white/10 text-gray-400">{bike.longDesc}</div>
                 </div>
               </motion.div>
             ) : (
@@ -454,7 +478,7 @@ Total Price: ${formattedTotal}`;
                 </div>
 
                 {/* Scrollable grid products */}
-                <div className="space-y-1.5 overflow-y-auto flex-1 max-h-[220px] pr-1 scrollbar-thin" dir={dir}>
+                <div className="grid grid-cols-2 gap-2 overflow-y-auto flex-1 max-h-[220px] pr-1 scrollbar-thin" dir={dir}>
                   {activeAddOns.length > 0 ? (
                     activeAddOns.map(addon => {
                       const isChecked = selectedAddOnIds.includes(addon.id);
@@ -465,46 +489,46 @@ Total Price: ${formattedTotal}`;
                         <div 
                           key={addon.id}
                           onClick={(e) => toggleAddOn(addon.id, e)}
-                          className={`flex items-center justify-between p-1.5 rounded-xl border transition-all cursor-pointer select-none ${
+                          className={`flex flex-col justify-between p-2 rounded-xl border relative cursor-pointer select-none transition-all duration-300 hover:scale-[1.03] ${
                             isChecked
-                              ? 'bg-[#22D3EE]/5 border-brand-accent/40 shadow-[0_0_10px_rgba(34,211,238,0.06)]'
-                              : 'bg-black/30 border-white/[0.04] hover:bg-white/[0.02]'
+                              ? 'bg-[#22D3EE]/5 border-brand-accent/40 shadow-[0_0_12px_rgba(34,211,238,0.15)] ring-1 ring-brand-accent/30'
+                              : 'bg-[#0F172A]/80 border-white/[0.04] hover:bg-white/[0.02] hover:border-white/10 hover:shadow-[0_0_8px_rgba(255,255,255,0.05)]'
                           }`}
                         >
-                          <div className="flex items-center gap-2 max-w-[70%]" dir={dir}>
-                            {/* Checkbox state */}
-                            <div className={`w-4 h-4 rounded flex items-center justify-center border shrink-0 transition-all ${
-                              isChecked 
-                                ? 'bg-brand-accent border-brand-accent text-[#0B0F1A]' 
-                                : 'border-white/20 bg-black/40'
-                            }`}>
-                              {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
-                            </div>
+                          {/* Selector Icon absolute placement at top right */}
+                          <div className={`absolute top-1.5 right-1.5 w-4 h-4 rounded-full flex items-center justify-center border transition-all ${
+                            isChecked 
+                              ? 'bg-brand-accent border-brand-accent text-[#0B0F1A]' 
+                              : 'border-white/20 bg-black/50'
+                          }`}>
+                            {isChecked && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                          </div>
 
-                            {/* Image Thumbnail */}
+                          <div className="flex flex-col items-center text-center gap-1.5 pt-1">
+                            {/* Accessory Image in Separate Card */}
                             {addon.image && (
                               <img 
                                 src={addon.image} 
                                 alt={addon.name} 
-                                className="w-7 h-7 rounded-md object-cover border border-white/10" 
+                                className="w-12 h-12 rounded-lg object-cover border border-white/10 shadow-md shadow-black/40" 
                                 referrerPolicy="no-referrer"
                               />
                             )}
 
-                            <div className="text-left leading-normal" dir={dir}>
-                              <p className="font-semibold text-white text-[11px] truncate max-w-[130px]">{displayAddonName}</p>
-                              <p className="text-[8.5px] text-gray-500 truncate max-w-[130px]" title={displayAddonDesc}>{displayAddonDesc}</p>
+                            <div className="leading-tight w-full">
+                              <p className="font-bold text-white text-[10px] truncate" title={displayAddonName}>{displayAddonName}</p>
+                              <p className="text-[8px] text-gray-500 truncate" title={displayAddonDesc}>{displayAddonDesc}</p>
                             </div>
                           </div>
 
-                          <div className="text-right">
-                            <span className="text-[10px] font-bold text-white">+{formatPrice(addon.price)}</span>
+                          <div className="text-center mt-2 pt-1 border-t border-white/[0.05] shrink-0">
+                            <span className="text-[9.5px] font-bold text-brand-accent">+{formatPrice(addon.price)}</span>
                           </div>
                         </div>
                       );
                     })
                   ) : (
-                    <div className="text-center py-8 text-gray-500 text-[10px] font-mono lowercase">
+                    <div className="col-span-2 text-center py-8 text-gray-500 text-[10px] font-mono lowercase">
                       {lang === 'ar' ? 'لا يوجد إضافات متوفرة لطلبها حالياً' : 'No compatible accessories located.'}
                     </div>
                   )}
@@ -540,12 +564,27 @@ Total Price: ${formattedTotal}`;
 
             {/* Book Now Button of the specific vehicle */}
             <button
-              onClick={handleBookNowClick}
-              className="flex-1 py-2 rounded-xl font-mono text-xs font-semibold tracking-wider text-white bg-gradient-to-r from-brand-primary to-brand-accent hover:brightness-110 active:scale-95 transition-all scroll-smooth shadow-md shadow-brand-primary/10 select-none cursor-pointer flex items-center justify-center gap-1 uppercase"
+              onClick={bike.isSold || (bike.isReserved && (!bike.reservationExpiry || new Date(bike.reservationExpiry).getTime() > Date.now())) ? undefined : handleBookNowClick}
+              disabled={!!bike.isSold || !!(bike.isReserved && (!bike.reservationExpiry || new Date(bike.reservationExpiry).getTime() > Date.now()))}
+              className={`flex-1 py-2 rounded-xl font-mono text-xs font-semibold tracking-wider text-white select-none flex items-center justify-center gap-1 uppercase transition-all duration-200 ${
+                bike.isSold 
+                  ? 'bg-red-950/40 text-red-400 border border-red-500/30 cursor-not-allowed shadow-none'
+                  : bike.isReserved && (!bike.reservationExpiry || new Date(bike.reservationExpiry).getTime() > Date.now())
+                    ? 'bg-yellow-950/40 text-yellow-400 border border-yellow-500/30 cursor-not-allowed shadow-none'
+                    : 'bg-gradient-to-r from-brand-primary to-brand-accent hover:brightness-110 active:scale-95 cursor-pointer shadow-md shadow-brand-primary/10'
+              }`}
               id={`book-now-card-${bike.id}`}
             >
-              <span>{t('book_now')}</span>
-              <ChevronRight className="w-3.5 h-3.5" />
+              {bike.isSold ? (
+                <span>{lang === 'ar' ? 'تم البيع' : 'SOLD'}</span>
+              ) : bike.isReserved && (!bike.reservationExpiry || new Date(bike.reservationExpiry).getTime() > Date.now()) ? (
+                <span>{lang === 'ar' ? 'محجوز' : 'RESERVED'}</span>
+              ) : (
+                <>
+                  <span>{t('book_now')}</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </>
+              )}
             </button>
 
           </div>

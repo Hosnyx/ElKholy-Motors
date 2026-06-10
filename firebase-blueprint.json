@@ -1,0 +1,85 @@
+{
+  "entities": {
+    "Motorcycle": {
+      "title": "Motorcycle",
+      "description": "A customized motorcycle or scooter product offering.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "categoryName": { "type": "string" },
+        "price": { "type": "string" },
+        "priceNum": { "type": "number" },
+        "image": { "type": "string" },
+        "tagline": { "type": "string" },
+        "shortDesc": { "type": "string" },
+        "longDesc": { "type": "string" },
+        "specs": { "type": "object" },
+        "isPopular": { "type": "boolean" },
+        "originalPrice": { "type": "number" },
+        "discount": { "type": "number" },
+        "discountType": { "type": "string" },
+        "offerLabel": { "type": "string" },
+        "addOns": { "type": "array" }
+      },
+      "required": ["id", "name", "category", "priceNum"]
+    },
+    "HomepageConfig": {
+      "title": "HomepageConfig",
+      "description": "Website custom style, font, and branding configurations.",
+      "type": "object",
+      "properties": {
+        "font": { "type": "string" },
+        "theme": { "type": "object" },
+        "header": { "type": "object" },
+        "mainContent": { "type": "object" },
+        "footer": { "type": "object" }
+      }
+    },
+    "UserAccount": {
+      "title": "UserAccount",
+      "description": "Staff or manager account for dashboard administration.",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "role": { "type": "string" }
+      },
+      "required": ["username", "password", "role"]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "Booking request record.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "motorcycleId": { "type": "string" },
+        "motorcycleName": { "type": "string" },
+        "totalPrice": { "type": "number" },
+        "addOns": { "type": "array" },
+        "createdAt": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "motorcycles": {
+      "schema": "Motorcycle",
+      "description": "Cyberpunk and sports motorcycles shown in the catalog"
+    },
+    "homepageConfig": {
+      "schema": "HomepageConfig",
+      "description": "Global custom aesthetic layouts and branding"
+    },
+    "users": {
+      "schema": "UserAccount",
+      "description": "System operators under various dashboard privileges"
+    },
+    "bookings": {
+      "schema": "Booking",
+      "description": "Active reservations and buyer transactions"
+    }
+  }
+}

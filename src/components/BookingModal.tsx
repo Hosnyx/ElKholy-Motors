@@ -6,17 +6,23 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Calendar, User, Phone, Mail, CheckCircle2, MessageSquare, ArrowRight, Bike, ShoppingBag, Check } from 'lucide-react';
-import { CategorySlug, Motorcycle, AddOn } from '../types';
+import { CategorySlug, Motorcycle, AddOn, StoreProduct } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { MOTORCYCLES_DATA } from '../data';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { doc, setDoc } from 'firebase/firestore';
 
 interface BookingModalProps {
   motorcycleId: string;
   motorcycleName: string;
   category: CategorySlug;
   price: string;
+  serialCode?: string; // New field
   preSelectedAddOnIds?: string[];
+  storeProducts?: StoreProduct[];
+  onAddToCart?: (product: any, type?: 'product' | 'motorcycle' | 'addon') => void;
   onClose: () => void;
+  invoiceWhatsappNumber?: string;
 }
 
 export default function BookingModal({
@@ -24,8 +30,12 @@ export default function BookingModal({
   motorcycleName,
   category,
   price,
+  serialCode, // New field
   preSelectedAddOnIds = [],
+  storeProducts = [],
+  onAddToCart,
   onClose,
+  invoiceWhatsappNumber,
 }: BookingModalProps) {
   const { lang, dir, t } = useLanguage();
   const [formData, setFormData] = useState({
@@ -99,9 +109,9 @@ export default function BookingModal({
 
   const formatPrice = (usd: number) => {
     if (lang === 'ar') {
-      return `${(usd * 50).toLocaleString()} جنيه`;
+      return `${usd.toLocaleString()} جنيه`;
     } else {
-      return `${(usd * 50).toLocaleString()} EGP`;
+      return `${usd.toLocaleString()} EGP`;
     }
   };
 
@@ -110,13 +120,13 @@ export default function BookingModal({
   // Accessories payload strings for WhatsApp
   const selectedAddOns = bikeAddOns.filter(a => selectedAddOnIds.includes(a.id));
   const addonsTextEn = selectedAddOns.length > 0
-    ? `\nAdd-ons Selected: ${selectedAddOns.map(a => `${a.name} (+${(a.price * 50).toLocaleString()} EGP)`).join(', ')}`
+    ? `\nAdd-ons Selected: ${selectedAddOns.map(a => `${a.name} (+${a.price.toLocaleString()} EGP)`).join(', ')}`
     : '';
   const addonsTextAr = selectedAddOns.length > 0
-    ? `\nالكماليات المحددة: ${selectedAddOns.map(a => `${a.nameAr || a.name} (+${(a.price * 50).toLocaleString()} جنيه)`).join('، ')}`
+    ? `\nالكماليات المحددة: ${selectedAddOns.map(a => `${a.nameAr || a.name} (+${a.price.toLocaleString()} جنيه)`).join('، ')}`
     : '';
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.phone || !formData.email || !formData.date) {
       setErrorMsg(t('required_fields'));
@@ -153,31 +163,49 @@ Phone: ${formData.phone}
 Email: ${formData.email}`;
     }
 
-    const targetPhone = '201007062123';
+    const targetPhone = invoiceWhatsappNumber || '201007062123';
     const encodedText = encodeURIComponent(waText);
     const waUrl = `https://wa.me/${targetPhone}?text=${encodedText}`;
 
-    // Persist booking to localStorage with complete details
+    const newBookingId = `book-${Date.now()}`;
+    const newBooking = {
+      id: newBookingId,
+      motorcycleId,
+      motorcycleName,
+      category,
+      price: displayPriceText,
+      name: formData.name,
+      phone: formData.phone,
+      email: formData.email,
+      date: formData.date,
+      selectedAddOns: selectedAddOns.map(a => ({ id: a.id, name: a.name, price: a.price })),
+      timestamp: new Date().toISOString(),
+      status: 'pending'
+    };
+
+    // 1. Persist booking to Firestore using our secure schema
+    try {
+      await setDoc(doc(db, 'bookings', newBookingId), {
+        customerName: formData.name || 'Anonymous User',
+        customerPhone: formData.phone || '000000000',
+        motorcycleId: motorcycleId,
+        motorcycleName: motorcycleName,
+        totalPrice: finalTotalPriceUsd,
+        status: 'pending'
+      });
+    } catch (err) {
+      console.warn("Firestore save failed, falling back gracefully to local index:", err);
+      // Optional: handleFirestoreError(err, OperationType.WRITE, `bookings/${newBookingId}`);
+    }
+
+    // 2. Persist booking to localStorage with complete details
     try {
       const existingStr = localStorage.getItem('elkholy_bookings');
       const existing = existingStr ? JSON.parse(existingStr) : [];
-      const newBooking = {
-        id: `book-${Date.now()}`,
-        motorcycleId,
-        motorcycleName,
-        category,
-        price: displayPriceText,
-        name: formData.name,
-        phone: formData.phone,
-        email: formData.email,
-        date: formData.date,
-        selectedAddOns: selectedAddOns.map(a => ({ id: a.id, name: a.name, price: a.price })),
-        timestamp: new Date().toISOString()
-      };
       existing.unshift(newBooking);
       localStorage.setItem('elkholy_bookings', JSON.stringify(existing));
     } catch (err) {
-      console.error("Error persisting booking:", err);
+      console.error("Error persisting booking locally:", err);
     }
 
     setSubmitted(true);
@@ -225,11 +253,11 @@ Customer Name: ${formData.name || '[Your Name]'}`;
         className="w-full max-w-lg glass-panel border border-[#6366F1]/30 rounded-3xl overflow-hidden relative shadow-2xl box-glow-cyan my-8"
       >
         {/* Glow corner highlights */}
-        <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-tr from-transparent to-brand-accent/20 blur-xl rounded-full animate-pulse" />
-        <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-bl from-transparent to-brand-primary/20 blur-xl rounded-full animate-pulse" />
+        <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-tr from-transparent to-brand-accent/20 blur-xl rounded-full animate-pulse pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-bl from-transparent to-brand-primary/20 blur-xl rounded-full animate-pulse pointer-events-none" />
 
         {/* Modal Window Title Panel */}
-        <div className="flex items-center justify-between border-b border-white/[0.08] p-5 shrink-0" dir={dir}>
+        <div className="flex items-center justify-between border-b border-white/[0.08] p-5 shrink-0 relative z-20" dir={dir}>
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-brand-accent/10 border border-brand-accent/20">
               <Bike className="w-5 h-5 text-brand-accent" />
@@ -243,7 +271,7 @@ Customer Name: ${formData.name || '[Your Name]'}`;
           </div>
           <button 
             onClick={onClose}
-            className="p-1.5 rounded-lg border border-white/5 bg-white/[0.03] text-gray-400 hover:text-white transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg border border-white/5 bg-white/[0.03] text-gray-400 hover:text-white transition-colors cursor-pointer relative z-50"
             aria-label="Close"
           >
             <X className="w-5 h-5" />
@@ -338,32 +366,95 @@ Customer Name: ${formData.name || '[Your Name]'}`;
                     {lang === 'ar' ? 'تعديل ملحقات وكماليات الطلب:' : 'CUSTOMIZE SELECTED ACCENTS & ADDONS:'}
                   </p>
 
-                  <div className="space-y-1 max-h-[110px] overflow-y-auto scrollbar-thin pr-1 text-xs">
+                  <div className="grid grid-cols-2 gap-2 max-h-[170px] overflow-y-auto scrollbar-thin pr-1 text-xs">
                     {bikeAddOns.map(addon => {
                       const isChecked = selectedAddOnIds.includes(addon.id);
+                      const displayAddonName = lang === 'ar' && addon.nameAr ? addon.nameAr : addon.name;
+                      const displayAddonDesc = lang === 'ar' && addon.descAr ? addon.descAr : addon.description;
                       return (
                         <div 
                           key={addon.id}
                           onClick={() => handleToggleAddOn(addon.id)}
-                          className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer select-none transition-all ${
+                          className={`flex flex-col justify-between p-2 rounded-xl border relative cursor-pointer select-none transition-all duration-300 hover:scale-[1.02] ${
                             isChecked 
-                              ? 'bg-[#22D3EE]/5 border-[#22D3EE]/30' 
-                              : 'bg-black/30 border-white/[0.03]'
+                              ? 'bg-[#22D3EE]/5 border-[#22D3EE]/40 shadow-[0_0_10px_rgba(34,211,238,0.12)] ring-1 ring-[#22D3EE]/20' 
+                              : 'bg-black/40 border-white/[0.05] hover:bg-black/20 hover:border-white/10'
                           }`}
                         >
-                          <div className="flex items-center gap-2">
-                            <div className={`w-3.5 h-3.5 rounded flex items-center justify-center border shrink-0 transition-all ${
-                              isChecked ? 'bg-[#22D3EE] border-[#22D3EE] text-[#0B0F1A]' : 'border-white/20'
-                            }`}>
-                              {isChecked && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                          {/* Selection circle indicator */}
+                          <div className={`absolute top-1.5 right-1.5 w-4.5 h-4.5 rounded-full flex items-center justify-center border transition-all ${
+                            isChecked ? 'bg-[#22D3EE] border-[#22D3EE] text-[#0B0F1A]' : 'border-white/20 bg-black/60'
+                          }`}>
+                            {isChecked && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                          </div>
+
+                          <div className="flex flex-col items-center text-center gap-1.5 pt-1">
+                            {addon.image && (
+                              <img 
+                                src={addon.image} 
+                                alt={addon.name} 
+                                className="w-10 h-10 rounded-lg object-cover border border-white/10 shadow-sm shadow-black/30 animate-pulse-slow" 
+                                referrerPolicy="no-referrer"
+                              />
+                            )}
+
+                            <div className="leading-tight w-full">
+                              <span className="text-white text-[10px] font-bold block truncate max-w-[125px]">
+                                {displayAddonName}
+                              </span>
+                              <span className="text-[8px] text-gray-500 block truncate max-w-[125px]">
+                                {displayAddonDesc}
+                              </span>
                             </div>
-                            <span className="text-white text-[11px] truncate max-w-[180px]">
-                              {lang === 'ar' && addon.nameAr ? addon.nameAr : addon.name}
+                          </div>
+
+                          <div className="text-center mt-2 pt-1 border-t border-white/[0.05] shrink-0">
+                            <span className="text-[9.5px] text-brand-accent font-bold">
+                              +{formatPrice(addon.price)}
                             </span>
                           </div>
-                          <span className="text-[10px] text-gray-400 font-bold">
-                            +{formatPrice(addon.price)}
-                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* STORE: FREQUENTLY BOUGHT TOGETHER */}
+              {selectedBike?.relatedProductIds && selectedBike.relatedProductIds.length > 0 && storeProducts.length > 0 && (
+                <div className="space-y-2 p-3.5 bg-black/40 border border-white/[0.05] rounded-xl font-mono">
+                  <p className="text-[10px] text-brand-secondary font-bold uppercase flex items-center gap-1">
+                    <ShoppingBag className="w-3.5 h-3.5 text-brand-secondary" />
+                    {lang === 'ar' ? 'ينصح بشرائها مع الموديل:' : 'FREQUENTLY BOUGHT TOGETHER:'}
+                  </p>
+
+                  <div className="flex overflow-x-auto hide-scrollbar gap-2 pb-1">
+                    {selectedBike.relatedProductIds.map(productId => {
+                      const sp = storeProducts.find(p => p.id === productId);
+                      if (!sp) return null;
+                      return (
+                        <div key={sp.id} className="min-w-[140px] flex flex-col justify-between p-2 rounded-xl border border-white/[0.05] bg-white/[0.02] relative transition-all duration-300">
+                          <div className="flex justify-center mb-2">
+                             <img src={sp.image} className="w-12 h-12 rounded-lg object-contain bg-black/50 overflow-hidden" />
+                          </div>
+                          
+                          <div className="text-center w-full mb-2">
+                             <div className="text-white text-[10px] font-bold truncate max-w-[120px]">{lang === 'ar' ? sp.nameAr : sp.name}</div>
+                             <div className="text-[10px] text-brand-secondary font-bold">{sp.price.toLocaleString()} {lang === 'ar' ? 'ج' : 'EGP'}</div>
+                          </div>
+                          
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (onAddToCart) {
+                                onAddToCart(sp, 'product');
+                                alert(lang === 'ar' ? 'تمت الإضافة للسلة' : 'Added to cart');
+                              }
+                            }}
+                            className="w-full text-center py-1.5 bg-brand-secondary/20 hover:bg-brand-secondary/40 text-brand-secondary text-[9px] uppercase tracking-widest rounded transition-colors"
+                          >
+                            + {lang === 'ar' ? 'إضافة' : 'ADD'}
+                          </button>
                         </div>
                       );
                     })}

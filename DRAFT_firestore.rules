@@ -1,0 +1,113 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Catch-all safety net (Global Safety Net)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global security helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      // Bootstrapped Admin: user email from runtime metadata is added as admin
+      return isSignedIn() && (
+        request.auth.token.email == 'hosnyahmedagur@gmail.com' ||
+        request.auth.token.email_verified == true && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Validation Blueprint: Motorcycle
+    function isValidMotorcycle(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.name is string && data.name.size() <= 100 &&
+             data.category is string && data.category.size() <= 10 &&
+             data.price is string && data.price.size() <= 50 &&
+             data.priceNum is number && data.priceNum >= 0 &&
+             (!data.keys().contains('originalPrice') || data.originalPrice is number) &&
+             (!data.keys().contains('discount') || data.discount is number) &&
+             (!data.keys().contains('image') || (data.image is string && data.image.size() <= 2000)) &&
+             (!data.keys().contains('tagline') || (data.tagline is string && data.tagline.size() <= 500)) &&
+             (!data.keys().contains('shortDesc') || (data.shortDesc is string && data.shortDesc.size() <= 1000)) &&
+             (!data.keys().contains('longDesc') || (data.longDesc is string && data.longDesc.size() <= 4000));
+    }
+
+    // Validation Blueprint: HomepageConfig
+    function isValidHomepageConfig(data) {
+      return data.font is string && data.font.size() <= 100 &&
+             data.theme is map &&
+             data.header is map &&
+             data.mainContent is map &&
+             data.footer is map;
+    }
+
+    // Validation Blueprint: UserAccount
+    function isValidUserAccount(data) {
+      return data.username is string && data.username.size() <= 50 &&
+             data.password is string && data.password.size() <= 100 &&
+             data.role is string && (data.role == 'Admin' || data.role == 'Manager' || data.role == 'Staff');
+    }
+
+    // Validation Blueprint: Booking
+    function isValidBooking(data) {
+      return data.customerName is string && data.customerName.size() <= 100 &&
+             data.customerPhone is string && data.customerPhone.size() <= 50 &&
+             data.motorcycleId is string && data.motorcycleId.size() <= 128 &&
+             data.motorcycleName is string && data.motorcycleName.size() <= 100 &&
+             data.totalPrice is number && data.totalPrice >= 0;
+    }
+
+    // motorcycles collection
+    match /motorcycles/{motorcycleId} {
+      allow get, list: if true;
+      allow create: if isAdmin() && isValidId(motorcycleId) && isValidMotorcycle(incoming());
+      allow update: if isAdmin() && isValidId(motorcycleId) && isValidMotorcycle(incoming()) && (
+        incoming().id == existing().id
+      );
+      allow delete: if isAdmin() && isValidId(motorcycleId);
+    }
+
+    // homepageConfig collection
+    match /homepageConfig/{configId} {
+      allow get, list: if true;
+      allow create: if isAdmin() && isValidId(configId) && isValidHomepageConfig(incoming());
+      allow update: if isAdmin() && isValidId(configId) && isValidHomepageConfig(incoming());
+      allow delete: if isAdmin() && isValidId(configId);
+    }
+
+    // users collection
+    match /users/{userId} {
+      allow get: if isAdmin() && isValidId(userId);
+      allow list: if isAdmin();
+      allow create: if isAdmin() && isValidId(userId) && isValidUserAccount(incoming());
+      allow update: if isAdmin() && isValidId(userId) && isValidUserAccount(incoming()) && (
+        incoming().username == existing().username
+      );
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    // bookings collection
+    match /bookings/{bookingId} {
+      allow get: if isAdmin() && isValidId(bookingId);
+      allow list: if isAdmin();
+      allow create: if isValidId(bookingId) && isValidBooking(incoming());
+      allow update: if isAdmin() && isValidId(bookingId) && isValidBooking(incoming());
+      allow delete: if isAdmin() && isValidId(bookingId);
+    }
+  }
+}

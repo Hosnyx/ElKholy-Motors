@@ -5,12 +5,17 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Bike, Shield, Heart, Menu, X, ArrowUpRight, Settings, Globe } from 'lucide-react';
+import { Bike, Shield, Heart, Menu, X, ArrowUpRight, Settings, Globe, ShoppingCart } from 'lucide-react';
 import { CategorySlug, HomepageConfig } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 
 interface NavbarProps {
   favoriteCount: number;
+  cartItemCount: number;
+  cartTotal: number;
+  activeView: 'home' | 'store';
+  onNavigate: (view: 'home' | 'store') => void;
+  onOpenCart: () => void;
   onOpenFavorites: () => void;
   onScrollToSection: (sectionId: string) => void;
   onOpenBooking: (motorcycleId: string, motorcycleName: string, category: CategorySlug, price: string) => void;
@@ -20,6 +25,11 @@ interface NavbarProps {
 
 export default function Navbar({
   favoriteCount,
+  cartItemCount,
+  cartTotal,
+  activeView,
+  onNavigate,
+  onOpenCart,
   onOpenFavorites,
   onScrollToSection,
   onOpenBooking,
@@ -110,10 +120,13 @@ export default function Navbar({
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const handleNavClick = (id: string) => {
-    onScrollToSection(id);
+  const handleNavClick = (id: string, view: 'home' | 'store' = 'home') => {
     setActiveTab(id);
     setMobileMenuOpen(false);
+    onNavigate(view);
+    if (view === 'home' && id !== 'store') {
+        onScrollToSection(id);
+    }
   };
 
   return (
@@ -129,28 +142,29 @@ export default function Navbar({
           
           {/* Logo - click returns Home */}
           <div 
-            onClick={() => handleNavClick('home')}
+            onClick={() => handleNavClick('home', 'home')}
             className={`cursor-pointer ${logoPosition === 'center' ? 'lg:absolute lg:start-1/2 lg:-translate-x-1/2 flex justify-center' : ''}`}
           >
             {renderLogo()}
           </div>
 
           {/* Desktop Nav Items */}
-          <nav className="hidden lg:flex items-center gap-6 font-mono text-xs font-semibold">
+          <nav className="hidden md:flex items-center gap-6 font-mono text-xs font-semibold">
             {[
-              { id: 'home', label: t('home') },
-              { id: 'categories', label: t('categories') },
-              { id: 'gallery', label: t('showroom') },
+              { id: 'home', label: t('home'), view: 'home' },
+              { id: 'categories', label: t('categories'), view: 'home' },
+              { id: 'gallery', label: t('showroom'), view: 'home' },
+              { id: 'store', label: lang === 'ar' ? 'المتجر' : 'Store', view: 'store' },
             ].map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => handleNavClick(tab.id)}
+                onClick={() => handleNavClick(tab.id, tab.view as 'home' | 'store')}
                 className={`relative px-1 py-2 cursor-pointer transition-colors duration-200 uppercase tracking-widest ${
-                  activeTab === tab.id ? 'text-brand-accent' : 'text-gray-400 hover:text-white'
+                  (activeView === tab.view && (activeView !== 'home' || activeTab === tab.id)) ? 'text-brand-accent' : 'text-gray-400 hover:text-white'
                 }`}
               >
                 {tab.label}
-                {activeTab === tab.id && (
+                {(activeView === tab.view && (activeView !== 'home' || activeTab === tab.id)) && (
                   <motion.div
                     layoutId="navbar-underline"
                     className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-brand-primary to-brand-accent"
@@ -197,6 +211,28 @@ export default function Navbar({
               title={t('admin_panel')}
             >
               <Settings className="w-5 h-5 animate-spin-slow" />
+            </button>
+
+            {/* Cart Icon Button */}
+            <button
+              onClick={onOpenCart}
+              className="relative p-2.5 rounded-xl border border-white/[0.08] hover:border-brand-accent bg-[#0B0F1A]/50 transition-colors cursor-pointer group"
+              title={lang === 'ar' ? 'سلة التسوق' : 'Shopping Cart'}
+              id="cart-btn"
+            >
+              <ShoppingCart className="w-5 h-5 text-white group-hover:text-brand-accent transition-colors" />
+              <AnimatePresence>
+                {cartItemCount > 0 && (
+                  <motion.span
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    exit={{ scale: 0 }}
+                    className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-brand-primary text-white text-[9px] font-bold font-mono"
+                  >
+                    {cartItemCount}
+                  </motion.span>
+                )}
+              </AnimatePresence>
             </button>
 
             {/* Favorites Icon Button */}
@@ -253,6 +289,19 @@ export default function Navbar({
               <Settings className="w-4 h-4" />
             </button>
 
+            {/* Cart Mobile */}
+            <button
+              onClick={onOpenCart}
+              className="relative p-2 rounded-lg border border-white/[0.08] bg-[#0B0F1A]/50 text-white"
+            >
+              <ShoppingCart className="w-4 h-4" />
+              {cartItemCount > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-brand-primary text-white text-[8px] font-bold">
+                  {cartItemCount}
+                </span>
+              )}
+            </button>
+
             <button
               onClick={onOpenFavorites}
               className="relative p-2 rounded-lg border border-white/[0.08] bg-[#0B0F1A]/50 text-white"
@@ -292,15 +341,16 @@ export default function Navbar({
             <div className="px-5 pt-3 pb-6 space-y-4">
               <div className="flex flex-col gap-2">
                 {[
-                  { id: 'home', label: t('home') },
-                  { id: 'categories', label: t('categories') },
-                  { id: 'gallery', label: t('showroom') },
+                  { id: 'home', label: t('home'), view: 'home' },
+                  { id: 'categories', label: t('categories'), view: 'home' },
+                  { id: 'gallery', label: t('showroom'), view: 'home' },
+                  { id: 'store', label: lang === 'ar' ? 'المتجر' : 'Store', view: 'store' },
                 ].map((tab) => (
                   <button
                     key={tab.id}
-                    onClick={() => handleNavClick(tab.id)}
-                    className={`w-full text-left py-2 font-mono text-sm tracking-widest uppercase ${
-                      activeTab === tab.id ? 'text-brand-accent font-semibold' : 'text-gray-300'
+                    onClick={() => handleNavClick(tab.id, tab.view as 'home' | 'store')}
+                    className={`w-full ${lang === 'ar' ? 'text-right' : 'text-left'} py-2 font-mono text-sm tracking-widest uppercase ${
+                      (activeView === tab.view && (activeView !== 'home' || activeTab === tab.id)) ? 'text-brand-accent font-semibold' : 'text-gray-300'
                     }`}
                   >
                     {tab.label}

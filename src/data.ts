@@ -54,6 +54,7 @@ export const DEFAULT_ADDONS = [
 ];
 
 export const MOTORCYCLES_DATA: Motorcycle[] = [
+  // ==================== CATEGORY A: SPORT (4 models) ====================
   {
     id: 'sport-cybersport-v4',
     name: 'ElKholy CyberSport V4',
@@ -86,7 +87,7 @@ export const MOTORCYCLES_DATA: Motorcycle[] = [
     categoryName: 'Sport',
     price: '$36,000',
     priceNum: 36000,
-    image: sportBikeImg, // Reuse beautifully styled sport image
+    image: sportBikeImg,
     tagline: 'The Dark Knight of Speed',
     shortDesc: 'Stealth-styled lightning runner featuring full-spectrum HUD connectivity and custom neural speed presets.',
     longDesc: 'The Phantom Apex is built around active bio-luminescent fiber composites that display real-time speed diagnostics. Outfitted with intelligent torque vectoring and automatic lane-assist lidar, this is the ultimate hybrid speedster.',
@@ -100,6 +101,71 @@ export const MOTORCYCLES_DATA: Motorcycle[] = [
     isPopular: false,
     addOns: DEFAULT_ADDONS
   },
+  {
+    id: 'sport-vortex-overdrive',
+    name: 'ElKholy Vortex Overdrive',
+    category: 'A',
+    categoryName: 'Sport',
+    price: '$41,000',
+    priceNum: 41000,
+    image: sportBikeImg,
+    tagline: 'Break the Sound Barrier',
+    shortDesc: 'Precision engineered speed racer with an ionic aerodynamic shell and real-time tire pressure matrix.',
+    longDesc: 'Formulated with ultra-high voltage dual magnetic rotors, the Vortex Overdrive is built for enthusiasts seeking sheer adrenaline. Adapts dynamically to asphalt temperatures and wet coefficient indices.',
+    specs: {
+      engine: '1100cc Dual-Magnetic Rotors Core',
+      topSpeed: '360 km/h',
+      fuelConsumption: '0.0 L/100km (Electric)',
+      power: '220 hp / 285 Nm',
+      weight: '165 kg'
+    },
+    isPopular: true,
+    addOns: DEFAULT_ADDONS
+  },
+  {
+    id: 'sport-cyberforce-ultra',
+    name: 'ElKholy CyberForce Ultra',
+    category: 'A',
+    categoryName: 'Sport',
+    price: '$29,900',
+    priceNum: 29900,
+    image: sportBikeImg,
+    tagline: 'Light, Agile, Unleashed',
+    shortDesc: 'Lightweight entry-level sport model containing interactive neural navigation links and rapid heat dissipation.',
+    longDesc: 'The CyberForce Ultra incorporates aerospace-grade composites for structural resilience. A perfect machine for urban racers seeking track-level performance on everyday streets.',
+    specs: {
+      engine: '750cc Liquid-Cooled Electric Inducer',
+      topSpeed: '280 km/h',
+      fuelConsumption: '0.0 L/100km (Electric)',
+      power: '150 hp / 190 Nm',
+      weight: '155 kg'
+    },
+    isPopular: false,
+    addOns: DEFAULT_ADDONS
+  },
+  {
+    id: 'sport-hypercharged-x',
+    name: 'ElKholy HyperCharged X',
+    category: 'A',
+    categoryName: 'Sport',
+    price: '$34,500',
+    priceNum: 34500,
+    image: sportBikeImg,
+    tagline: 'Futuristic Electric Thunderbolt',
+    shortDesc: 'Hypercharged induction superbike featuring active lateral stabilizers and advanced torque vectoring matrices.',
+    longDesc: 'The HyperCharged X represents the zenith of electrical velocity. Equipped with custom carbon-glass cooling canals and a solid-electrolyte power pack, this motorcycle delivers continuous high-output propulsion under any track load.',
+    specs: {
+      engine: '1000cc Dual-Array Supercharged Induction',
+      topSpeed: '310 km/h',
+      fuelConsumption: '0.0 L/100km (Electric)',
+      power: '185 hp / 240 Nm',
+      weight: '162 kg'
+    },
+    isPopular: false,
+    addOns: DEFAULT_ADDONS
+  },
+
+  // ==================== CATEGORY B: CRUISER (4 models) ====================
   {
     id: 'cruiser-ghost-cruiser',
     name: 'ElKholy Ghost Cruiser',
@@ -147,6 +213,71 @@ export const MOTORCYCLES_DATA: Motorcycle[] = [
     addOns: DEFAULT_ADDONS
   },
   {
+    id: 'cruiser-titan-beast',
+    name: 'ElKholy Titan Beast',
+    category: 'B',
+    categoryName: 'Cruiser',
+    price: '$46,000',
+    priceNum: 46000,
+    image: cruiserBikeImg,
+    tagline: 'The Ultimate Iron Giant',
+    shortDesc: 'A colossal low-slung powerhouse offering heavy-duty chrome detailing, ambient dynamic exhaust notes, and dual highway mapping.',
+    longDesc: 'The Titan Beast combines a retro double-cradle posture with absolute hyper-electric solid state power. Offers micro-seconds adaptive pneumatic ride buffers to ensure a smooth, luxurious floating sensation.',
+    specs: {
+      engine: '1900cc Dual Solid State Hybrid Induction',
+      topSpeed: '210 km/h',
+      fuelConsumption: '0.5 L/100km',
+      power: '180 hp / 320 Nm',
+      weight: '260 kg'
+    },
+    isPopular: true,
+    addOns: DEFAULT_ADDONS
+  },
+  {
+    id: 'cruiser-rebel-v2',
+    name: 'ElKholy Rebel V2',
+    category: 'B',
+    categoryName: 'Cruiser',
+    price: '$32,000',
+    priceNum: 32000,
+    image: cruiserBikeImg,
+    tagline: 'Neon Renegade',
+    shortDesc: 'Stripped-down bobber styling paired with advanced smart diagnostics, active wheel lights, and standard ABS.',
+    longDesc: 'Comfortable, nimble, and beautifully accented with customizable perimeter glow grids. Designed specifically for evening cruises and long relaxed road adventures.',
+    specs: {
+      engine: '1200cc Parallel-Twin High Torque',
+      topSpeed: '180 km/h',
+      fuelConsumption: '1.8 L/100km',
+      power: '110 hp / 195 Nm',
+      weight: '210 kg'
+    },
+    isPopular: false,
+    addOns: DEFAULT_ADDONS
+  },
+  {
+    id: 'cruiser-royal-sovereign',
+    name: 'ElKholy Royal Sovereign',
+    category: 'B',
+    categoryName: 'Cruiser',
+    price: '$41,500',
+    priceNum: 41500,
+    image: cruiserBikeImg,
+    tagline: 'Imperial Cruiser Majesty',
+    shortDesc: 'Premium heavy bobber layout accented with hand-polished nickel cladding, solid-gel comfort frame, and custom smart soundscapes.',
+    longDesc: 'Engineered as the quintessential majestic long-distance sovereign, this model provides full active pneumatic load leveling, premium ergonomic heated seating curves, and ambient perimeter LED strips linked directly with navigation alerts.',
+    specs: {
+      engine: '1750cc Solid-State Magnetic Torque Hub',
+      topSpeed: '195 km/h',
+      fuelConsumption: '0.0 L/100km (Electric)',
+      power: '150 hp / 265 Nm',
+      weight: '238 kg'
+    },
+    isPopular: false,
+    addOns: DEFAULT_ADDONS
+  },
+
+  // ==================== CATEGORY C: TOURING / ADVENTURE (4 models) ====================
+  {
     id: 'adventure-dune-wanderer',
     name: 'ElKholy Dune Wanderer',
     category: 'C',
@@ -193,6 +324,71 @@ export const MOTORCYCLES_DATA: Motorcycle[] = [
     addOns: DEFAULT_ADDONS
   },
   {
+    id: 'adventure-canyon-tracker',
+    name: 'ElKholy Canyon Tracker',
+    category: 'C',
+    categoryName: 'Adventure',
+    price: '$31,500',
+    priceNum: 31500,
+    image: adventureBikeImg,
+    tagline: 'Pathfinder of the Wilds',
+    shortDesc: 'Robust multi-terrain explorer equipped with water-resistant composite side-panniers, manual suspension lifting, and GPRS link.',
+    longDesc: 'Perfectly balanced for extended dual-sport expeditions. Equipped with an auxiliary hydrogen-charge cells array that can regenerate energy during passive braking or descent.',
+    specs: {
+      engine: '950cc Self-charging HydrogenCore',
+      topSpeed: '175 km/h',
+      fuelConsumption: '0.0 L/100km (Hydrogen)',
+      power: '110 hp / 160 Nm',
+      weight: '190 kg'
+    },
+    isPopular: false,
+    addOns: DEFAULT_ADDONS
+  },
+  {
+    id: 'adventure-aurora-explorer',
+    name: 'ElKholy Aurora Explorer',
+    category: 'C',
+    categoryName: 'Adventure',
+    price: '$48,000',
+    priceNum: 48000,
+    image: adventureBikeImg,
+    tagline: 'The Long Range Pioneer',
+    shortDesc: 'Luxury heavy-touring ship equipped with heated seats, satellite navigation HUD, and carbon safety armor.',
+    longDesc: 'Whether tracking through remote mountain pathways or embarking on continental tours, the Aurora Explorer delivers supreme stability and cargo space. Double-layered carbon armor bars defend crucial mechanisms from impact.',
+    specs: {
+      engine: '1400cc Dual-induct Electro-Fusion Cluster',
+      topSpeed: '220 km/h',
+      fuelConsumption: '0.1 L/100km',
+      power: '180 hp / 270 Nm',
+      weight: '230 kg'
+    },
+    isPopular: true,
+    addOns: DEFAULT_ADDONS
+  },
+  {
+    id: 'adventure-nomad-legend',
+    name: 'ElKholy Nomad Legend',
+    category: 'C',
+    categoryName: 'Adventure',
+    price: '$38,900',
+    priceNum: 38900,
+    image: adventureBikeImg,
+    tagline: 'Untamable Terrain Dominator',
+    shortDesc: 'A powerful off-road dual-sport titan constructed with heavy-duty titanium alloy and customizable cargo expansion racks.',
+    longDesc: 'The Nomad Legend was built for the fearless. It features predictive multi-terrain traction algorithms, heavy duty reinforced crash frame bars, high capacity adventure panniers, and standard military-grade navigation GPS setups.',
+    specs: {
+      engine: '1150cc Liquid-Cooled Parallel Twin',
+      topSpeed: '200 km/h',
+      fuelConsumption: '2.5 L/100km',
+      power: '135 hp / 195 Nm',
+      weight: '205 kg'
+    },
+    isPopular: false,
+    addOns: DEFAULT_ADDONS
+  },
+
+  // ==================== CATEGORY S: SCOOTER (4 models) ====================
+  {
     id: 'scooter-cyberglide',
     name: 'ElKholy CyberGlide X',
     category: 'S',
@@ -233,6 +429,69 @@ export const MOTORCYCLES_DATA: Motorcycle[] = [
     },
     isPopular: false,
     addOns: DEFAULT_ADDONS
+  },
+  {
+    id: 'scooter-solar-wave',
+    name: 'ElKholy Solar Wave Smart',
+    category: 'S',
+    categoryName: 'Scooter',
+    price: '$14,000',
+    priceNum: 14000,
+    image: scooterImg,
+    tagline: 'Ride the Sunlight',
+    shortDesc: 'Lightweight carbon carbon-fiber frame retrofitted with micro solar-recharge panels and built-in navigation.',
+    longDesc: 'The Solar Wave features integrated high-efficiency photovoltaic panels across the front fairing, feeding a trickle-charge into the auxiliary battery. Reclaim city commutes on a completely self-sustaining energy loop.',
+    specs: {
+      engine: '500cc High-Output Solar-Electric Hub',
+      topSpeed: '140 km/h',
+      fuelConsumption: '0.0 L/100km',
+      power: '60 hp / 105 Nm',
+      weight: '105 kg'
+    },
+    isPopular: false,
+    addOns: DEFAULT_ADDONS
+  },
+  {
+    id: 'scooter-quantum-pulse',
+    name: 'ElKholy Quantum Pulse Jet',
+    category: 'S',
+    categoryName: 'Scooter',
+    price: '$16,500',
+    priceNum: 16500,
+    image: scooterImg,
+    tagline: 'The City Lightning Bolt',
+    shortDesc: 'High-velocity premium commuter scooter with instant smart-drive torque, smart helmets support, and perimeter lasers.',
+    longDesc: 'The Quantum Pulse represents the upper-tier of premium urban mobility. Featuring double-wishbone active electronic front suspension shocks and a full digital diagnostic cockpit.',
+    specs: {
+      engine: '650cc Quantum Induction Liquid-Cooled Hub',
+      topSpeed: '150 km/h',
+      fuelConsumption: '0.0 L/100km',
+      power: '72 hp / 120 Nm',
+      weight: '115 kg'
+    },
+    isPopular: true,
+    addOns: DEFAULT_ADDONS
+  },
+  {
+    id: 'scooter-fusion-lite',
+    name: 'ElKholy Fusion Lite',
+    category: 'S',
+    categoryName: 'Scooter',
+    price: '$11,000',
+    priceNum: 11000,
+    image: scooterImg,
+    tagline: 'Ultralight Urban Fleet',
+    shortDesc: 'Featherweight high-efficiency electronic scooter perfect for quick smart commutes and dense urban corridors.',
+    longDesc: 'The Fusion Lite offers responsive performance with dual rear brushless motors and a super compact collapsible posture. Features full interactive bluetooth application linkage for keyless digital engine ignition.',
+    specs: {
+      engine: '350cc Dual Rear Brushless Hubs',
+      topSpeed: '120 km/h',
+      fuelConsumption: '0.0 L/100km (Solid state compact)',
+      power: '45 hp / 85 Nm',
+      weight: '88 kg'
+    },
+    isPopular: false,
+    addOns: DEFAULT_ADDONS
   }
 ];
 
@@ -257,6 +516,9 @@ export const CATEGORY_DES_MAP = {
 
 export const DEFAULT_HOMEPAGE_CONFIG: HomepageConfig = {
   font: 'Space Grotesk',
+  fontHeadings: 'Space Grotesk',
+  fontSubheadings: 'Cairo',
+  fontBody: 'Inter',
   theme: {
     primaryColor: '#6366F1',
     secondaryColor: '#A855F7',

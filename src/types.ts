@@ -44,6 +44,11 @@ export interface Motorcycle {
   discountType?: 'percentage' | 'fixed';
   offerLabel?: string;
   addOns?: AddOn[];
+  relatedProductIds?: string[];
+  serialCode?: string;
+  isSold?: boolean;
+  isReserved?: boolean;
+  reservationExpiry?: string;
 }
 
 export interface BookingData {
@@ -67,6 +72,40 @@ export interface FilterState {
 
 export type UserRole = 'Admin' | 'Manager' | 'Staff';
 
+export type StoreCategory = 'Oils' | 'Safety' | 'Smart' | 'Parts' | 'Lifestyle';
+
+export interface StoreProduct {
+  id: string; // The generated Product Code
+  name: string;
+  nameAr: string;
+  category: StoreCategory;
+  brand: string;
+  price: number;
+  originalPrice?: number;
+  discountPercentage?: number;
+  offerLabel?: string;
+  offerLabelAr?: string;
+  image: string;
+  galleryUrls: string[];
+  description: string;
+  descriptionAr: string;
+  specs: string; // Or mapped key-values
+  specsAr: string;
+  stockCount: number;
+  soldCount: number;
+  isHidden: boolean;
+  isOffer: boolean;
+  discount?: number;
+  discountType?: 'percentage' | 'fixed';
+}
+
+export interface CartItem {
+  id: string;
+  product: StoreProduct | Motorcycle | AddOn;
+  type: 'product' | 'motorcycle' | 'addon';
+  quantity: number;
+}
+
 export interface UserAccount {
   username: string;
   password?: string;
@@ -75,6 +114,10 @@ export interface UserAccount {
 
 export interface HomepageConfig {
   font: string;
+  fontHeadings?: string;
+  fontSubheadings?: string;
+  fontBody?: string;
+  invoiceWhatsappNumber?: string; // New WhatsApp number for invoices
   theme: {
     primaryColor: string;
     secondaryColor: string;
@@ -135,7 +178,21 @@ export interface HomepageConfig {
       instagram: string;
       whatsapp: string;
       youtube: string;
+      [key: string]: string;
     };
     quickLinks: { label: string; labelAr: string; url: string }[];
+    address?: string;
+    addressAr?: string;
+    phone?: string;
+    email?: string;
+    hoursSunThu?: string;
+    hoursSunThuAr?: string;
+    hoursFri?: string;
+    hoursFriAr?: string;
+    hoursSat?: string;
+    hoursSatAr?: string;
+    copyright?: string;
+    copyrightAr?: string;
+    customSocialLinks?: { id: string; name: string; url: string; iconUrl?: string }[];
   };
 }

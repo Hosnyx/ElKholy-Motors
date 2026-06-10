@@ -7,7 +7,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Bike, Heart, Trash2, ArrowDown, Sparkles, Target, 
-  Settings, Award, Zap, Shield, HelpCircle, X, ChevronRight, MessageCircle 
+  Settings, Award, Zap, Shield, HelpCircle, X, ChevronRight, MessageCircle, ShoppingCart
 } from 'lucide-react';
 
 import Navbar from './components/Navbar';
@@ -17,13 +17,22 @@ import BookingModal from './components/BookingModal';
 import PdfModal from './components/PdfModal';
 import ContactFooter from './components/ContactFooter';
 import AdminPanel from './components/AdminPanel';
+import StoreView from './components/StoreView';
+import CartDrawer from './components/CartDrawer';
 
 import { Motorcycle, CategorySlug, FilterState, BookingData, HomepageConfig } from './types';
 import { MOTORCYCLES_DATA, HERO_BG_IMAGE, DEFAULT_HOMEPAGE_CONFIG } from './data';
+import { MOCK_STORE_PRODUCTS } from './dataStoreMock';
 import { useLanguage } from './context/LanguageContext';
+import { db, handleFirestoreError, OperationType } from './lib/firebase';
+import { collection, doc, getDocs, setDoc, getDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 
 export default function App() {
   const { lang, dir, t } = useLanguage();
+
+  const formatAppPrice = (num: number) => {
+    return lang === 'ar' ? `${num.toLocaleString()} جنيه` : `${num.toLocaleString()} EGP`;
+  };
 
   // Load persistence configurations from LocalStorage
   const [motorcyclesData, setMotorcyclesData] = useState<Motorcycle[]>(() => {
@@ -47,17 +56,66 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
 
+  // Active View State
+  const [activeView, setActiveView] = useState<'home' | 'store'>('home');
+
+  // Shopping Cart state
+  const [cartItems, setCartItems] = useState<any[]>(() => {
+    const saved = localStorage.getItem('elkholy_cart');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [isCartOpen, setIsCartOpen] = useState(false);
+
+  // Store Products state
+  const [storeProductsData, setStoreProductsData] = useState<any[]>(() => {
+    const saved = localStorage.getItem('elkholy_store_products');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   // Filters configurations
   const [filters, setFilters] = useState<FilterState>({
     searchQuery: '',
     category: 'ALL',
-    priceRange: 100000,
+    priceRange: 5000000,
     sortBy: 'default',
     onlyPopular: false,
   });
 
   // Special speed range slider filter state
   const [speedRange, setSpeedRange] = useState<number>(100);
+
+  // Firestore persistent update synchronizers
+  const handleUpdateMotorcycles = async (updated: Motorcycle[]) => {
+    setMotorcyclesData(updated);
+    localStorage.setItem('elkholy_motorcycles', JSON.stringify(updated));
+    try {
+      const querySnapshot = await getDocs(collection(db, 'motorcycles'));
+      const fbIds = querySnapshot.docs.map(doc => doc.id);
+      const nextIds = updated.map(bike => bike.id);
+
+      for (const id of fbIds) {
+        if (!nextIds.includes(id)) {
+          await deleteDoc(doc(db, 'motorcycles', id));
+        }
+      }
+
+      for (const bike of updated) {
+        await setDoc(doc(db, 'motorcycles', bike.id), bike);
+      }
+    } catch (err) {
+      console.warn("Unable to sync motorcycles changes to Firestore:", err);
+    }
+  };
+
+  const handleUpdateHomepageConfig = async (updatedConfig: HomepageConfig) => {
+    setHomepageConfig(updatedConfig);
+    localStorage.setItem('elkholy_homepage_config', JSON.stringify(updatedConfig));
+    try {
+      await setDoc(doc(db, 'homepageConfig', 'main'), updatedConfig);
+    } catch (err) {
+      console.warn("Unable to sync homepageConfig changes to Firestore:", err);
+    }
+  };
 
   // Favorites sidebar trigger state
   const [favoritesOpen, setFavoritesOpen] = useState(false);
@@ -71,11 +129,15 @@ export default function App() {
     motorcycleName: string;
     category: CategorySlug;
     price: string;
+    serialCode?: string;
     preSelectedAddOnIds?: string[];
   } | null>(null);
 
   // Active PDF document context
   const [activePdfItem, setActivePdfItem] = useState<Motorcycle | null>(null);
+
+  // Toggle specifications for flagship bike
+  const [showFlagshipSpecs, setShowFlagshipSpecs] = useState(false);
 
   // Bento Reservation states
   const [bentoBookingName, setBentoBookingName] = useState('');
@@ -137,9 +199,7 @@ export default function App() {
 
     const catLabelMap = { A: 'Sport (A)', B: 'Cruiser (B)', C: 'Adventure (C)', S: 'Scooter (S)' };
     const arabicCategory = catLabelMap[flagshipBike.category] || flagshipBike.categoryName;
-    const priceText = lang === 'ar' 
-      ? `${(flagshipBike.priceNum * 50).toLocaleString()} جنيه` 
-      : `${(flagshipBike.priceNum * 50).toLocaleString()} EGP`;
+    const priceText = formatAppPrice(flagshipBike.priceNum);
 
     let waText = '';
     if (lang === 'ar') {
@@ -180,7 +240,8 @@ Phone: ${bentoBookingPhone}`;
         phone: bentoBookingPhone,
         email: 'N/A (Quick Booking)',
         date: new Date().toISOString().split('T')[0],
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        status: 'sold'
       };
       existing.unshift(newBooking);
       localStorage.setItem('elkholy_bookings', JSON.stringify(existing));
@@ -193,39 +254,213 @@ Phone: ${bentoBookingPhone}`;
     window.open(waUrl, '_blank');
   };
 
+  // 1. Fetch, synchronize and write bootstrap data to Firestore on startup
+  useEffect(() => {
+    async function loadData() {
+      // Load homepageConfig from Firestore
+      try {
+        const configDocRef = doc(db, 'homepageConfig', 'main');
+        const configSnap = await getDoc(configDocRef);
+        if (configSnap.exists()) {
+          const cloudConfig = configSnap.data() as HomepageConfig;
+          setHomepageConfig(cloudConfig);
+          localStorage.setItem('elkholy_homepage_config', JSON.stringify(cloudConfig));
+        } else {
+          // If Firestore is completely pristine, initialize it with DEFAULT_HOMEPAGE_CONFIG
+          await setDoc(configDocRef, DEFAULT_HOMEPAGE_CONFIG);
+        }
+      } catch (err) {
+        console.warn("Unable to fetch homepageConfig from Firestore, falling back to local:", err);
+      }
+
+      // Load motorcycles from Firestore
+      try {
+        const querySnapshot = await getDocs(collection(db, 'motorcycles'));
+        if (!querySnapshot.empty) {
+          const list: Motorcycle[] = [];
+          querySnapshot.forEach((doc) => {
+            list.push(doc.data() as Motorcycle);
+          });
+          
+          // Self-healing check: Ensure every category contains at least 5 models.
+          const categoriesToCheck: ('A' | 'B' | 'C' | 'S')[] = ['A', 'B', 'C', 'S'];
+          let needsSelfHeal = false;
+          for (const cat of categoriesToCheck) {
+            const count = list.filter(b => b.category === cat).length;
+            if (count < 5) {
+              needsSelfHeal = true;
+              break;
+            }
+          }
+
+          if (needsSelfHeal) {
+            console.log("Self-healing triggered: Seeding default models into Firestore...");
+            const mergedList = [...list];
+            for (const defaultBike of MOTORCYCLES_DATA) {
+              if (!mergedList.some(b => b.id === defaultBike.id)) {
+                mergedList.push(defaultBike);
+                // Attempt to write to Firestore, but do not block client load if unauthorized/not-admin
+                try {
+                  await setDoc(doc(db, 'motorcycles', defaultBike.id), defaultBike);
+                } catch (writeErr) {
+                  console.warn(`Could not seed missing bike ${defaultBike.id} to Firestore (expected if not logged in):`, writeErr);
+                }
+              }
+            }
+            setMotorcyclesData(mergedList);
+            localStorage.setItem('elkholy_motorcycles', JSON.stringify(mergedList));
+          } else {
+            setMotorcyclesData(list);
+            localStorage.setItem('elkholy_motorcycles', JSON.stringify(list));
+          }
+        } else {
+          // If Firestore is empty, seed active motorcycles collection with default machines array
+          console.log("Firestore empty: Seeding initial categories into remote...");
+          for (const bike of MOTORCYCLES_DATA) {
+            try {
+              await setDoc(doc(db, 'motorcycles', bike.id), bike);
+            } catch (writeErr) {
+              console.warn(`Could not seed bike ${bike.id} to Firestore (expected if not logged in):`, writeErr);
+            }
+          }
+          setMotorcyclesData(MOTORCYCLES_DATA);
+          localStorage.setItem('elkholy_motorcycles', JSON.stringify(MOTORCYCLES_DATA));
+        }
+      } catch (err) {
+        console.warn("Unable to fetch motorcycles from Firestore, falling back to local:", err);
+        setMotorcyclesData(MOTORCYCLES_DATA);
+        localStorage.setItem('elkholy_motorcycles', JSON.stringify(MOTORCYCLES_DATA));
+      }
+
+      // Load Store products from Firestore
+      try {
+        const querySnapshot = await getDocs(collection(db, 'store_products'));
+        if (!querySnapshot.empty && querySnapshot.size >= 50) {
+          const list: any[] = [];
+          querySnapshot.forEach((doc) => {
+            list.push(doc.data());
+          });
+          setStoreProductsData(list);
+          localStorage.setItem('elkholy_store_products', JSON.stringify(list));
+        } else {
+          // If empty or fewer than 50 items, try to seed the premium products automatically using a fast WriteBatch
+          console.log("Seeding 50 premium store products in batch...");
+          try {
+            const batch = writeBatch(db);
+            for (const p of MOCK_STORE_PRODUCTS) {
+              batch.set(doc(db, 'store_products', p.id), p);
+            }
+            await batch.commit();
+          } catch (writeErr) {
+            console.warn("Could not write initial store seed to Firestore (fallback to local state):", writeErr);
+          }
+          // Always fall back to MOCK_STORE_PRODUCTS so that the view is populated immediately, 
+          // even if the remote batch commit failed permissions check!
+          setStoreProductsData(MOCK_STORE_PRODUCTS);
+          localStorage.setItem('elkholy_store_products', JSON.stringify(MOCK_STORE_PRODUCTS));
+        }
+      } catch (err) {
+        console.warn("Unable to fetch store products from Firestore, falling back to local:", err);
+        const local = localStorage.getItem('elkholy_store_products');
+        if (local && JSON.parse(local).length > 0) {
+          setStoreProductsData(JSON.parse(local));
+        } else {
+          setStoreProductsData(MOCK_STORE_PRODUCTS);
+          localStorage.setItem('elkholy_store_products', JSON.stringify(MOCK_STORE_PRODUCTS));
+        }
+      }
+    }
+    loadData();
+  }, []);
+
+  // Check for product landing from QR code scanning
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const prodId = params.get('product');
+    if (prodId) {
+      setActiveView('store');
+    }
+  }, []);
+
   // Persist favorites in client key storage
   useEffect(() => {
     localStorage.setItem('elkholy_favorites', JSON.stringify(favorites));
   }, [favorites]);
 
+  // Persist cart to local client state
+  useEffect(() => {
+    localStorage.setItem('elkholy_cart', JSON.stringify(cartItems));
+  }, [cartItems]);
+
   // Dynamic design branding manager (Page Builder integration)
   useEffect(() => {
-    // 1. Injected dynamic fonts stylesheet
-    const fontId = 'dynamic-google-fonts';
-    let link = document.getElementById(fontId) as HTMLLinkElement;
-    if (!link) {
-      link = document.createElement('link');
-      link.id = fontId;
-      link.rel = 'stylesheet';
-      document.head.appendChild(link);
-    }
-    
     const fontQueriesMap: Record<string, string> = {
       'Inter': 'family=Inter:wght@300;400;500;600;700&display=swap',
       'Poppins': 'family=Poppins:wght@300;400;500;600;700&display=swap',
       'Montserrat': 'family=Montserrat:wght@300;400;500;600;700&display=swap',
       'Roboto': 'family=Roboto:wght@300;400;500;700&display=swap',
-      'Cairo': 'family=Cairo:wght@300;400;500;600;700;850&display=swap',
+      'Cairo': 'family=Cairo:wght@300;400;500;600;700;800;900&display=swap',
       'Tajawal': 'family=Tajawal:wght@300;400;500;700&display=swap',
       'IBM Plex Sans': 'family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap',
       'Open Sans': 'family=Open+Sans:wght@300;400;500;600;700&display=swap',
       'Lato': 'family=Lato:wght@300;400;700&display=swap',
       'Nunito': 'family=Nunito:wght@300;400;600;700&display=swap',
+      'Space Grotesk': 'family=Space+Grotesk:wght@300;400;500;600;700&display=swap',
+      // Arabic companion fonts
+      'IBM Plex Sans Arabic': 'family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap',
+      'Rubik': 'family=Rubik:wght@300;400;500;600;700;800;900&display=swap',
+      'Almarai': 'family=Almarai:wght@300;400;700;800&display=swap',
+      'Vazirmatn': 'family=Vazirmatn:wght@300;400;500;600;700;800;900&display=swap',
     };
     
-    const activeFont = homepageConfig.font || 'Space Grotesk';
-    const query = fontQueriesMap[activeFont] || 'family=Space+Grotesk:wght@300;400;500;600;700&display=swap';
-    link.href = `https://fonts.googleapis.com/css2?${query}`;
+    const fontToCssMap: Record<string, string> = {
+      'Inter': "'Inter', 'Vazirmatn', sans-serif",
+      'Poppins': "'Poppins', 'Rubik', sans-serif",
+      'Montserrat': "'Montserrat', 'Almarai', sans-serif",
+      'Roboto': "'Roboto', 'Vazirmatn', sans-serif",
+      'Cairo': "'Cairo', sans-serif",
+      'Tajawal': "'Tajawal', sans-serif",
+      'IBM Plex Sans': "'IBM Plex Sans Arabic', 'IBM Plex Sans', sans-serif",
+      'Open Sans': "'Open Sans', 'Vazirmatn', sans-serif",
+      'Lato': "'Lato', 'Almarai', sans-serif",
+      'Nunito': "'Nunito', 'Rubik', sans-serif",
+      'Space Grotesk': "'Space Grotesk', 'Vazirmatn', sans-serif",
+    };
+    
+    const activeFontHeadings = homepageConfig.fontHeadings || homepageConfig.font || 'Space Grotesk';
+    const activeFontSubheadings = homepageConfig.fontSubheadings || homepageConfig.font || 'Cairo';
+    const activeFontBody = homepageConfig.fontBody || homepageConfig.font || 'Inter';
+
+    const activeFontHeadingsCss = fontToCssMap[activeFontHeadings] || `"${activeFontHeadings}", sans-serif`;
+    const activeFontSubheadingsCss = fontToCssMap[activeFontSubheadings] || `"${activeFontSubheadings}", sans-serif`;
+    const activeFontBodyCss = fontToCssMap[activeFontBody] || `"${activeFontBody}", sans-serif`;
+
+    // Load all possible fonts to ensure the font choice buttons and typography previews elements render correctly in the visual settings picker
+    const fontFamilies = Array.from(new Set([
+      'Inter', 'Poppins', 'Montserrat', 'Roboto', 'Cairo', 'Tajawal', 
+      'IBM Plex Sans', 'Open Sans', 'Lato', 'Nunito', 'Space Grotesk',
+      'IBM Plex Sans Arabic', 'Rubik', 'Almarai', 'Vazirmatn',
+      activeFontHeadings, activeFontSubheadings, activeFontBody
+    ]));
+    
+    const cleanQueryParts = fontFamilies.map(f => {
+      const q = fontQueriesMap[f] || `family=${f.replace(/ /g, '+')}:wght@300;400;500;600;700`;
+      return q.replace('&display=swap', '');
+    });
+    
+    // 1. Injected dynamic fonts stylesheet via <link>
+    const fontsUrl = `https://fonts.googleapis.com/css2?${cleanQueryParts.join('&')}&display=swap`;
+    const fontLinkId = 'dynamic-google-fonts';
+    let linkTag = document.getElementById(fontLinkId) as HTMLLinkElement;
+    if (!linkTag) {
+      linkTag = document.createElement('link');
+      linkTag.id = fontLinkId;
+      linkTag.rel = 'stylesheet';
+      document.head.appendChild(linkTag);
+    }
+    if (linkTag.href !== fontsUrl) {
+      linkTag.href = fontsUrl;
+    }
     
     // 2. Injected dynamic styles tag to override general styles and spacings
     const styleId = 'dynamic-homepage-theme';
@@ -246,7 +481,8 @@ Phone: ${bentoBookingPhone}`;
     const radValue = radiusMap[homepageConfig.theme.buttonRadius] || '12px';
     const spacingMult = homepageConfig.theme.spacingMultiplier || 1.0;
     
-    styleTag.innerHTML = `
+        styleTag.innerHTML = `
+
       :root {
         --color-brand-primary: ${homepageConfig.theme.primaryColor || '#6366F1'} !important;
         --color-brand-secondary: ${homepageConfig.theme.secondaryColor || '#A855F7'} !important;
@@ -254,11 +490,72 @@ Phone: ${bentoBookingPhone}`;
         --color-brand-bg: ${homepageConfig.theme.backgroundColor || '#0B0F1A'} !important;
         --button-radius: ${radValue} !important;
         --spacing-scale: ${spacingMult} !important;
+        
+        --font-headings: ${activeFontHeadingsCss} !important;
+        --font-subheadings: ${activeFontSubheadingsCss} !important;
+        --font-body: ${activeFontBodyCss} !important;
+        --font-sans: var(--font-body) !important;
+      }
+      
+      /* Global fonts: default/body style with correct inheritance */
+      html, body {
+        font-family: var(--font-body) !important;
+        --font-sans: var(--font-body) !important;
+      }
+      
+      .font-sans, [class*="font-sans"] {
+        font-family: var(--font-body) !important;
+      }
+      
+      /* Paragraphs & descriptions always use body font */
+      p, .font-body, .description, [class*="description"] {
+        font-family: var(--font-body) !important;
+      }
+      
+      /* Main headings */
+      h1, h2, h3, .font-headings, [class*="font-headings"] {
+        font-family: var(--font-headings) !important;
+      }
+
+      /* Secondary subheadings, small tags, buttons, badges */
+      h4, h5, h6, .font-subheadings, [class*="font-subheadings"],
+      button, .badge, [class*="badge"] {
+        font-family: var(--font-subheadings), var(--font-body) !important;
+      }
+
+      /* Exact font-preview classes with high specificity so they can override any global custom settings */
+      .admin-panel-root .font-preview-Inter, .admin-panel-root .font-preview-Inter *, .font-preview-Inter, .font-preview-Inter * { font-family: 'Inter', 'Vazirmatn', sans-serif !important; }
+      .admin-panel-root .font-preview-Poppins, .admin-panel-root .font-preview-Poppins *, .font-preview-Poppins, .font-preview-Poppins * { font-family: 'Poppins', 'Rubik', sans-serif !important; }
+      .admin-panel-root .font-preview-Montserrat, .admin-panel-root .font-preview-Montserrat *, .font-preview-Montserrat, .font-preview-Montserrat * { font-family: 'Montserrat', 'Almarai', sans-serif !important; }
+      .admin-panel-root .font-preview-Roboto, .admin-panel-root .font-preview-Roboto *, .font-preview-Roboto, .font-preview-Roboto * { font-family: 'Roboto', 'Vazirmatn', sans-serif !important; }
+      .admin-panel-root .font-preview-Cairo, .admin-panel-root .font-preview-Cairo *, .font-preview-Cairo, .font-preview-Cairo * { font-family: 'Cairo', sans-serif !important; }
+      .admin-panel-root .font-preview-Tajawal, .admin-panel-root .font-preview-Tajawal *, .font-preview-Tajawal, .font-preview-Tajawal * { font-family: 'Tajawal', sans-serif !important; }
+      .admin-panel-root .font-preview-IBMPlexSans, .admin-panel-root .font-preview-IBMPlexSans *, .font-preview-IBMPlexSans, .font-preview-IBMPlexSans * { font-family: 'IBM Plex Sans Arabic', 'IBM Plex Sans', sans-serif !important; }
+      .admin-panel-root .font-preview-OpenSans, .admin-panel-root .font-preview-OpenSans *, .font-preview-OpenSans, .font-preview-OpenSans * { font-family: 'Open Sans', 'Vazirmatn', sans-serif !important; }
+      .admin-panel-root .font-preview-Lato, .admin-panel-root .font-preview-Lato *, .font-preview-Lato, .font-preview-Lato * { font-family: 'Lato', 'Almarai', sans-serif !important; }
+      .admin-panel-root .font-preview-Nunito, .admin-panel-root .font-preview-Nunito *, .font-preview-Nunito, .font-preview-Nunito * { font-family: 'Nunito', 'Rubik', sans-serif !important; }
+      .admin-panel-root .font-preview-SpaceGrotesk, .admin-panel-root .font-preview-SpaceGrotesk *, .font-preview-SpaceGrotesk, .font-preview-SpaceGrotesk * { font-family: 'Space Grotesk', 'Vazirmatn', sans-serif !important; }
+
+      /* PRESERVE fonts and inline designs inside admin/management overlays without overriding preview classes */
+      .admin-panel-root {
+        font-family: "Space Grotesk", "Inter", sans-serif;
+      }
+
+      .admin-panel-root .font-mono,
+      .admin-panel-root [class*="font-mono"],
+      .admin-panel-root pre,
+      .admin-panel-root code,
+      .admin-panel-root .font-mono * {
+        font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace !important;
+      }
+
+      /* Keep monospace elements */
+      .font-mono, [class*="font-mono"], pre, code, .font-mono * {
+        font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace !important;
       }
       
       body {
         background-color: ${homepageConfig.theme.backgroundColor || '#0B0F1A'} !important;
-        font-family: "${activeFont}", "Space Grotesk", "Cairo", sans-serif !important;
       }
       
       button, .rounded-xl, .rounded-2xl, .rounded-3xl, .glass-panel {
@@ -297,19 +594,122 @@ Phone: ${bentoBookingPhone}`;
     setFavorites([]);
   };
 
+  const handleAddToCart = (product: any, type: 'product' | 'motorcycle' | 'addon' = 'product') => {
+    setCartItems(prev => {
+      const existing = prev.find(item => item.id === product.id);
+      if (existing) {
+        return prev.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
+      }
+      return [...prev, { id: product.id, product, type, quantity: 1 }];
+    });
+    setIsCartOpen(true);
+  };
+
+  const handleUpdateCartQuantity = (id: string, delta: number) => {
+    setCartItems(prev => prev.map(item => {
+      if (item.id === id) {
+        const newQ = item.quantity + delta;
+        return newQ > 0 ? { ...item, quantity: newQ } : item;
+      }
+      return item;
+    }));
+  };
+
+  const handleRemoveCartItem = (id: string) => {
+    setCartItems(prev => prev.filter(item => item.id !== id));
+  };
+
+  const handleClearCart = () => {
+    setCartItems([]);
+  };
+
+  const handleCheckoutCart = async () => {
+    if (cartItems.length === 0) return;
+    let orderText = lang === 'ar' ? 'مرحباً، أريد طلب:\n\n' : 'Hello, I would like to order:\n\n';
+    
+    let total = 0;
+    const names: string[] = [];
+    const ids: string[] = [];
+    cartItems.forEach(item => {
+      const name = lang === 'ar' ? (item.product.nameAr || item.product.name) : item.product.name;
+      const price = item.product.price || item.product.priceNum || 0;
+      orderText += `- ${name} (x${item.quantity}) = ${(price * item.quantity).toLocaleString()} ${lang === 'ar' ? 'ج.م' : 'EGP'}\n`;
+      total += price * item.quantity;
+      names.push(`${name} (x${item.quantity})`);
+      ids.push(item.product.id || 'PRODUCT');
+    });
+    
+    orderText += `\n${lang === 'ar' ? 'الإجمالي:' : 'Total:'} ${total.toLocaleString()} ${lang === 'ar' ? 'ج.م' : 'EGP'}\n`;
+    
+    const orderId = `STORE-ORDER-${Date.now()}`;
+    const timestampStr = new Date().toISOString();
+    const dateStr = timestampStr.split('T')[0];
+
+    const targetPhone = homepageConfig.invoiceWhatsappNumber || '201211116631';
+    
+    // 1. Persist product booking to Firestore
+    try {
+      await setDoc(doc(db, 'bookings', orderId), {
+        customerName: lang === 'ar' ? 'طلب متجر (واتساب)' : 'Store Order (WA)',
+        customerPhone: targetPhone,
+        customerEmail: 'customer@elkholy.com',
+        motorcycleId: ids.join(', '),
+        motorcycleName: names.join(', '),
+        totalPrice: total,
+        timestamp: timestampStr,
+        date: dateStr,
+        status: 'sold'
+      });
+    } catch (err) {
+      console.warn("Firestore save of store order failed, falling back gracefully:", err);
+    }
+
+    // 2. Persist booking to localStorage with complete details
+    try {
+      const existingStr = localStorage.getItem('elkholy_bookings');
+      const existing = existingStr ? JSON.parse(existingStr) : [];
+      const newBookingObj = {
+        id: orderId,
+        motorcycleId: ids.join(', '),
+        motorcycleName: names.join(', '),
+        category: 'A',
+        price: `${total.toLocaleString()} EGP`,
+        name: lang === 'ar' ? 'طلب متجر (واتساب)' : 'Store Order (WA)',
+        phone: targetPhone,
+        email: 'customer@elkholy.com',
+        date: dateStr,
+        timestamp: timestampStr,
+        status: 'sold'
+      };
+      existing.unshift(newBookingObj);
+      localStorage.setItem('elkholy_bookings', JSON.stringify(existing));
+    } catch (err) {
+      console.error("Error persisting booking locally:", err);
+    }
+    
+    const waUrl = `https://wa.me/${targetPhone}?text=${encodeURIComponent(orderText)}`;
+    window.open(waUrl, '_blank');
+  };
+
   // Favorites collection list lookup
   const favoriteBikes = useMemo(() => {
     return motorcyclesData.filter(bike => favorites.includes(bike.id));
   }, [favorites, motorcyclesData]);
 
+  const favoriteProducts = useMemo(() => {
+    return storeProductsData.filter(p => favorites.includes(p.id));
+  }, [favorites, storeProductsData]);
+
   // Open booking modal
   const handleOpenBooking = (id: string, name: string, cat: CategorySlug, price: string, e?: any, selectedAddOnIds?: string[]) => {
     if (e) e.stopPropagation();
+    const bike = motorcyclesData.find(b => b.id === id);
     setActiveBookItem({
       motorcycleId: id,
       motorcycleName: name,
       category: cat,
       price: price,
+      serialCode: bike?.serialCode,
       preSelectedAddOnIds: selectedAddOnIds
     });
   };
@@ -325,7 +725,7 @@ Phone: ${bentoBookingPhone}`;
     return (
       filters.searchQuery.trim() !== '' ||
       filters.category !== 'ALL' ||
-      filters.priceRange < 100000 ||
+      filters.priceRange < 5000000 ||
       speedRange > 100 ||
       filters.onlyPopular ||
       filters.sortBy !== 'default'
@@ -334,6 +734,19 @@ Phone: ${bentoBookingPhone}`;
 
   const filteredBikes = useMemo(() => {
     let result = [...motorcyclesData];
+
+    // Filter out sold motorcycles
+    result = result.filter(bike => !bike.isSold);
+
+    // Filter out active reserved motorcycles
+    result = result.filter(bike => {
+      if (bike.isReserved) {
+        if (!bike.reservationExpiry) return false;
+        const isExpired = new Date(bike.reservationExpiry).getTime() <= Date.now();
+        return isExpired;
+      }
+      return true;
+    });
 
     // Search query calculation
     if (filters.searchQuery.trim() !== '') {
@@ -383,7 +796,7 @@ Phone: ${bentoBookingPhone}`;
     setFilters({
       searchQuery: '',
       category: 'ALL',
-      priceRange: 100000,
+      priceRange: 5000000,
       sortBy: 'default',
       onlyPopular: false,
     });
@@ -394,13 +807,13 @@ Phone: ${bentoBookingPhone}`;
     const mapAr = {
       A: { title: 'موتوسيكلات سبورت فئة (A)', desc: 'وحوش رياضية هجينة مصممة للتسارع الاستثنائي والتحكم المتفوق على حلبات السباق.' },
       B: { title: 'موتوسيكلات كروزر فئة (B)', desc: 'ملوك الطريق والترحال الطويل مع مقاعد وثيرة ورفاهية كروزر معززة هيدروليكياً.' },
-      C: { title: 'دراجات مغامرات فئة (C)', desc: 'دراجات مخصصة للطرق الجبلية والوعرة قادرة على عبور الصحاري والدروب بأمان متين.' },
+      C: { title: 'دراجات تورينج والرحلات فئة (C)', desc: 'دراجات مخصصة للطرق والرحلات الطويلة قادرة على عبور المسافات والدروب بأمان متين.' },
       S: { title: 'اسكوترات ذكية فئة (S)', desc: 'أسطورة الترحال الحضري والاسكوترات الكهربائية الخفيفة والسريعة للمدن الحديثة دون انبعاثات.' }
     };
     const mapEn = {
       A: { title: 'SPORT SEC-A FLEET', desc: 'Aerodynamic track predators built for extreme velocity and instant power response.' },
       B: { title: 'CRUISER SEC-B FLEET', desc: 'Sovereigns of the open road, featuring ultra-comfortable seating and magnetic suspension.' },
-      C: { title: 'ADVENTURE SEC-C FLEET', desc: 'Heavy-duty plasma tourers engineered to bypass extreme terrains and desert storms.' },
+      C: { title: 'TOURING SEC-C FLEET', desc: 'Heavy-duty performance touring tourers engineered to bypass extreme distances and road terrains.' },
       S: { title: 'SCOOTER SEC-S FLEET', desc: 'Fidelity lightweight electric vehicles designed for seamless, carbon-neutral city commuting.' }
     };
     return lang === 'ar' ? mapAr : mapEn;
@@ -415,6 +828,16 @@ Phone: ${bentoBookingPhone}`;
       {/* HEADER NAVBAR */}
       <Navbar 
         favoriteCount={favorites.length}
+        cartItemCount={cartItems.reduce((acc, item) => acc + item.quantity, 0)}
+        cartTotal={cartItems.reduce((acc, item) => acc + (item.product.price * item.quantity), 0)}
+        activeView={activeView}
+        onNavigate={(view) => {
+          setActiveView(view);
+          if (view === 'home') {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        }}
+        onOpenCart={() => setIsCartOpen(true)}
         onOpenFavorites={() => setFavoritesOpen(true)}
         onScrollToSection={handleScrollToSection}
         onOpenBooking={(id, name, cat, price) => handleOpenBooking(id, name, cat, price)}
@@ -422,12 +845,14 @@ Phone: ${bentoBookingPhone}`;
         homepageConfig={homepageConfig}
       />
 
-      {/* ===================== HERO BANNER LANDING COMPONENT ===================== */}
-      <section 
-        id="home" 
-        className="relative min-h-screen flex items-center justify-center pt-24 pb-12 overflow-hidden bg-cover bg-center"
-        style={{ backgroundImage: `linear-gradient(to bottom, rgba(11, 15, 26, 0.7), rgba(11, 15, 26, 0.95)), url(${homepageConfig.header.backgroundImage || HERO_BG_IMAGE})` }}
-      >
+      {activeView === 'home' && (
+      <>
+        {/* ===================== HERO BANNER LANDING COMPONENT ===================== */}
+        <section 
+          id="home" 
+          className="relative min-h-screen flex items-center justify-center pt-24 pb-12 overflow-hidden bg-cover bg-center"
+          style={{ backgroundImage: `linear-gradient(to bottom, rgba(11, 15, 26, 0.7), rgba(11, 15, 26, 0.95)), url(${homepageConfig.header.backgroundImage || HERO_BG_IMAGE})` }}
+        >
         {/* Dynamic atmospheric ambient glow bubbles */}
         <div className="absolute top-1/4 left-1/12 w-[350px] h-[350px] rounded-full bg-brand-primary/10 blur-[130px] pointer-events-none animate-pulse-slow font-sans" />
         <div className="absolute bottom-1/4 right-1/12 w-[300px] h-[300px] rounded-full bg-brand-accent/15 blur-[120px] pointer-events-none animate-pulse-slow" style={{ animationDelay: '2s' }} />
@@ -670,7 +1095,7 @@ Phone: ${bentoBookingPhone}`;
             <div className="relative z-10 flex items-center justify-between mt-8 pt-4 border-t border-white/[0.08]" dir={dir}>
               <div className="text-left" dir={dir}>
                 <p className="text-2xl font-mono font-bold text-[#22D3EE] drop-shadow-[0_0_8px_rgba(34,211,238,0.4)]">
-                  {lang === 'ar' ? `${(flagshipBike.priceNum * 50).toLocaleString()} جنيه` : `${(flagshipBike.priceNum * 50).toLocaleString()} EGP`}
+                  {formatAppPrice(flagshipBike.priceNum)}
                 </p>
                 <p className="text-[10px] uppercase tracking-widest text-gray-550 font-mono font-bold mt-0.5">{t('starting_price')}</p>
               </div>
@@ -685,13 +1110,114 @@ Phone: ${bentoBookingPhone}`;
                   </span>
                 </button>
                 <button
-                  onClick={() => handleOpenBooking(flagshipBike.id, flagshipBike.name, flagshipBike.category, flagshipBike.price)}
+                  onClick={() => setShowFlagshipSpecs(true)}
                   className="px-6 py-2.5 bg-white text-black font-extrabold uppercase text-xs rounded-full hover:bg-brand-accent hover:text-black transition-all cursor-pointer font-mono tracking-widest shadow-md"
                 >
                   {t('explore_specs').toUpperCase()}
                 </button>
               </div>
             </div>
+
+            {/* FROSTED BLUEPRINT SPECIFICATIONS OVERLAY */}
+            <AnimatePresence>
+              {showFlagshipSpecs && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.96 }}
+                  className="absolute inset-0 z-20 bg-black/95 backdrop-blur-md p-6 flex flex-col justify-between"
+                  dir={dir}
+                >
+                  {/* Header */}
+                  <div className="flex items-center justify-between border-b border-white/[0.08] pb-3" dir={dir}>
+                    <div>
+                      <span className="text-[10px] font-mono font-bold tracking-widest text-brand-accent uppercase block">
+                        {t('specifications')}
+                      </span>
+                      <h3 className="text-xl font-bold text-white tracking-wide font-sans mt-0.5" dir="ltr">
+                        {flagshipBike.name}
+                      </h3>
+                    </div>
+                    <button
+                      onClick={() => setShowFlagshipSpecs(false)}
+                      className="p-1.5 rounded-lg border border-white/10 bg-white/5 font-mono text-[10px] text-gray-400 hover:text-white transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span>{t('flip_back')}</span>
+                    </button>
+                  </div>
+
+                  {/* Content grid */}
+                  <div className="grid grid-cols-2 gap-3.5 my-4 overflow-y-auto max-h-[200px] font-mono text-xs pr-1" dir={dir}>
+                    <div className="p-2.5 border border-white/[0.04] rounded-xl bg-white/[0.01] text-left" dir={dir}>
+                      <span className="text-gray-500 text-[9px] block uppercase font-bold tracking-wide">
+                        {t('drive_engine')}
+                      </span>
+                      <span className="font-semibold text-white block mt-1" dir="ltr">
+                        {flagshipBike.specs.engine}
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 border border-white/[0.04] rounded-xl bg-white/[0.01] text-left" dir={dir}>
+                      <span className="text-gray-500 text-[9px] block uppercase font-bold tracking-wide">
+                        {t('clock_speed')}
+                      </span>
+                      <span className="font-semibold text-brand-accent block mt-1" dir="ltr">
+                        {flagshipBike.specs.topSpeed}
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 border border-white/[0.04] rounded-xl bg-white/[0.01] text-left" dir={dir}>
+                      <span className="text-gray-500 text-[9px] block uppercase font-bold tracking-wide">
+                        {t('energy_consumption')}
+                      </span>
+                      <span className="font-semibold text-white block mt-1" dir="ltr">
+                        {flagshipBike.specs.fuelConsumption}
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 border border-white/[0.04] rounded-xl bg-white/[0.01] text-left" dir={dir}>
+                      <span className="text-gray-500 text-[9px] block uppercase font-bold tracking-wide">
+                        {t('output_capacity')}
+                      </span>
+                      <span className="font-semibold text-brand-secondary block mt-1" dir="ltr">
+                        {flagshipBike.specs.power}
+                      </span>
+                    </div>
+
+                    {/* Integrated dynamic description block */}
+                    <div className="col-span-2 p-3 bg-white/[0.01] border border-white/[0.04] rounded-xl font-sans text-xs text-gray-300 leading-relaxed text-left" dir={dir}>
+                      <p className="font-semibold text-white text-[9.5px] font-mono uppercase tracking-wider mb-1" dir={dir}>
+                        {lang === 'ar' ? 'الوصف الكامل' : 'FULL SPECIFICATION STORY'}
+                      </p>
+                      <p className="text-gray-400">
+                        {lang === 'ar' ? (flagshipBike.descAr || flagshipBike.shortDesc) : (flagshipBike.longDesc || flagshipBike.shortDesc)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Footer checkout controls */}
+                  <div className="pt-3 border-t border-white/[0.08] flex items-center justify-between" dir={dir}>
+                    <div className="text-left" dir={dir}>
+                      <p className="text-[9px] text-gray-500 font-mono tracking-widest uppercase">{t('starting_price')}</p>
+                      <p className="text-lg font-mono font-bold text-brand-accent mt-1">
+                        {formatAppPrice(flagshipBike.priceNum)}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setShowFlagshipSpecs(false);
+                        handleOpenBooking(flagshipBike.id, flagshipBike.name, flagshipBike.category, flagshipBike.price);
+                      }}
+                      className="px-5 py-2 bg-gradient-to-r from-brand-primary to-brand-accent text-white font-extrabold uppercase text-[10px] rounded-full hover:brightness-110 active:scale-95 transition-all cursor-pointer font-mono tracking-widest shadow-md flex items-center gap-1.5"
+                    >
+                      <span>{t('book_now')}</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* BENTO CARD 3: RESERVATION TERMINAL INPUT TILE (col-span-12 lg:col-span-3) */}
@@ -732,7 +1258,7 @@ Phone: ${bentoBookingPhone}`;
                   <div className="flex justify-between text-[10px] font-bold font-mono mt-1">
                     <span className="text-gray-400">{t('estimated_price')}:</span>
                     <span className="text-brand-secondary">
-                      {lang === 'ar' ? `${(flagshipBike.priceNum * 50).toLocaleString()} جنيه` : `${(flagshipBike.priceNum * 50).toLocaleString()} EGP`}
+                      {formatAppPrice(flagshipBike.priceNum)}
                     </span>
                   </div>
                 </div>
@@ -877,6 +1403,29 @@ Phone: ${bentoBookingPhone}`;
 
       {/* ===================== FOOTER ===================== */}
       <ContactFooter onScrollToSection={handleScrollToSection} homepageConfig={homepageConfig} />
+      </>
+      )}
+
+      {activeView === 'store' && (
+        <StoreView 
+          products={storeProductsData} 
+          homepageConfig={homepageConfig} 
+          onAddToCart={handleAddToCart}
+          favorites={favorites}
+          onToggleFavorite={handleToggleFavorite}
+        />
+      )}
+
+      {/* Cart Drawer */}
+      <CartDrawer 
+        isOpen={isCartOpen}
+        onClose={() => setIsCartOpen(false)}
+        cartItems={cartItems}
+        onUpdateQuantity={handleUpdateCartQuantity}
+        onRemoveItem={handleRemoveCartItem}
+        onClearCart={handleClearCart}
+        onCheckout={handleCheckoutCart}
+      />
 
       {/* ===================== SECURE ADMIN TUNNEL PANEL OVERLAY ===================== */}
       <AnimatePresence>
@@ -884,9 +1433,33 @@ Phone: ${bentoBookingPhone}`;
           <AdminPanel 
             onClose={() => setAdminOpen(false)}
             motorcycles={motorcyclesData}
-            onUpdateMotorcycles={(updated) => {
-              setMotorcyclesData(updated);
-              localStorage.setItem('elkholy_motorcycles', JSON.stringify(updated));
+            onUpdateMotorcycles={handleUpdateMotorcycles}
+            storeProducts={storeProductsData}
+            onUpdateStoreProducts={async (updated) => {
+              setStoreProductsData(updated);
+              localStorage.setItem('elkholy_store_products', JSON.stringify(updated));
+              try {
+                const querySnapshot = await getDocs(collection(db, 'store_products'));
+                const fbIds = querySnapshot.docs.map(doc => doc.id);
+                const nextIds = updated.map(p => p.id);
+                
+                // Write in Firestore WriteBatch to speed up operations from O(n) requests to a single atomic call
+                const batch = writeBatch(db);
+                
+                for (const id of fbIds) {
+                  if (!nextIds.includes(id)) {
+                    batch.delete(doc(db, 'store_products', id));
+                  }
+                }
+                
+                for (const p of updated) {
+                  batch.set(doc(db, 'store_products', p.id), p);
+                }
+                
+                await batch.commit();
+              } catch (e) {
+                console.warn("Unable to sync store products in batch:", e);
+              }
             }}
             customText={customText}
             onUpdateCustomText={(updatedText) => {
@@ -894,10 +1467,7 @@ Phone: ${bentoBookingPhone}`;
               localStorage.setItem('elkholy_custom_text', JSON.stringify(updatedText));
             }}
             homepageConfig={homepageConfig}
-            onUpdateHomepageConfig={(updatedConfig) => {
-              setHomepageConfig(updatedConfig);
-              localStorage.setItem('elkholy_homepage_config', JSON.stringify(updatedConfig));
-            }}
+            onUpdateHomepageConfig={handleUpdateHomepageConfig}
           />
         )}
       </AnimatePresence>
@@ -910,7 +1480,11 @@ Phone: ${bentoBookingPhone}`;
             motorcycleName={activeBookItem.motorcycleName}
             category={activeBookItem.category}
             price={activeBookItem.price}
+            serialCode={activeBookItem.serialCode}
+            invoiceWhatsappNumber={homepageConfig.invoiceWhatsappNumber}
             preSelectedAddOnIds={activeBookItem.preSelectedAddOnIds}
+            storeProducts={storeProductsData}
+            onAddToCart={handleAddToCart}
             onClose={() => setActiveBookItem(null)}
           />
         )}
@@ -951,7 +1525,9 @@ Phone: ${bentoBookingPhone}`;
                     <Heart className="w-5 h-5 text-red-500 fill-red-500 animate-pulse" />
                     <div className="text-left" dir={dir}>
                       <h3 className="text-base font-bold font-mono tracking-widest text-white uppercase">{t('garage')}</h3>
-                      <p className="text-[10px] text-gray-500 font-mono uppercase">{t('bookmarked_vehicles')} ({favoriteBikes.length})</p>
+                      <p className="text-[10px] text-gray-500 font-mono uppercase">
+                        {lang === 'ar' ? `المحركات والمستلزمات (${favoriteBikes.length + favoriteProducts.length})` : `Bookmarked Items (${favoriteBikes.length + favoriteProducts.length})`}
+                      </p>
                     </div>
                   </div>
                   <button 
@@ -964,57 +1540,124 @@ Phone: ${bentoBookingPhone}`;
 
                 {/* Items Area */}
                 <div className="flex-1 overflow-y-auto p-6 space-y-4" dir={dir}>
-                  {favoriteBikes.length > 0 ? (
-                    favoriteBikes.map((bike) => (
-                      <div 
-                        key={bike.id}
-                        className="flex items-center gap-4 bg-black/40 border border-white/5 rounded-2xl p-3 hover:border-brand-accent/25 transition-all group"
-                        dir={dir}
-                      >
-                        <div className="w-20 h-16 bg-[#111827] border border-white/10 rounded-xl overflow-hidden flex items-center justify-center p-1 relative shrink-0">
-                          <img 
-                            src={bike.image} 
-                            alt={bike.name} 
-                            referrerPolicy="no-referrer"
-                            className="w-full h-full object-contain"
-                          />
-                        </div>
-
-                        <div className="flex-1 min-w-0 text-left" dir={dir}>
-                          <span className="text-[9px] font-mono font-bold tracking-wider text-brand-accent block">
-                            SECTION-{bike.category}
+                  {(favoriteBikes.length > 0 || favoriteProducts.length > 0) ? (
+                    <div className="space-y-6">
+                      {/* Motorcycles List */}
+                      {favoriteBikes.length > 0 && (
+                        <div className="space-y-3">
+                          <span className="text-[10px] font-mono uppercase font-black text-brand-accent tracking-widest block border-b border-white/5 pb-1">
+                            {lang === 'ar' ? 'الدرجات النارية' : 'Motorcycles'}
                           </span>
-                          <span className="text-sm font-bold text-white truncate block font-sans" dir="ltr">
-                            {bike.name}
-                          </span>
-                          <span className="text-xs font-mono text-gray-400 font-bold">
-                            {lang === 'ar' ? `${(bike.priceNum * 50).toLocaleString()} جنيه` : `${(bike.priceNum * 50).toLocaleString()} EGP`}
-                          </span>
-                        </div>
+                          {favoriteBikes.map((bike) => (
+                            <div 
+                              key={bike.id}
+                              className="flex items-center gap-4 bg-black/40 border border-white/5 rounded-2xl p-3 hover:border-brand-accent/25 transition-all group"
+                              dir={dir}
+                            >
+                              <div className="w-20 h-16 bg-[#111827] border border-white/10 rounded-xl overflow-hidden flex items-center justify-center p-1 relative shrink-0">
+                                <img 
+                                  src={bike.image} 
+                                  alt={bike.name} 
+                                  referrerPolicy="no-referrer"
+                                  className="w-full h-full object-contain"
+                                />
+                              </div>
 
-                        {/* Quick Action buttons */}
-                        <div className="flex flex-col gap-1 shrink-0">
-                          <button
-                            onClick={() => {
-                              setFavoritesOpen(false);
-                              handleOpenBooking(bike.id, bike.name, bike.category, bike.price);
-                            }}
-                            className="p-1.5 bg-brand-primary hover:bg-brand-accent text-[#0B0F1A] rounded-lg transition-colors cursor-pointer"
-                            title="Quick Book Catalog"
-                          >
-                            <MessageCircle className="w-3.5 h-3.5 shrink-0" />
-                          </button>
-                          <button
-                            onClick={(e) => handleToggleFavorite(bike.id, e)}
-                            className="p-1.5 bg-white/5 hover:bg-red-500/15 text-gray-400 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
-                            title="Remove"
-                          >
-                            <Trash2 className="w-3.5 h-3.5 shrink-0" />
-                          </button>
-                        </div>
+                              <div className="flex-1 min-w-0 text-left" dir={dir}>
+                                <span className="text-[9px] font-mono font-bold tracking-wider text-brand-accent block">
+                                  SECTION-{bike.category}
+                                </span>
+                                <span className="text-sm font-bold text-white truncate block font-sans" dir="ltr">
+                                  {bike.name}
+                                </span>
+                                <span className="text-xs font-mono text-gray-400 font-bold">
+                                  {formatAppPrice(bike.priceNum)}
+                                </span>
+                              </div>
 
-                      </div>
-                    ))
+                              {/* Quick Action buttons */}
+                              <div className="flex flex-col gap-1 shrink-0">
+                                <button
+                                  onClick={() => {
+                                    setFavoritesOpen(false);
+                                    handleOpenBooking(bike.id, bike.name, bike.category, bike.price);
+                                  }}
+                                  className="p-1.5 bg-brand-primary hover:bg-brand-accent text-[#0B0F1A] rounded-lg transition-colors cursor-pointer"
+                                  title="Quick Book Catalog"
+                                >
+                                  <MessageCircle className="w-3.5 h-3.5 shrink-0" />
+                                </button>
+                                <button
+                                  onClick={(e) => handleToggleFavorite(bike.id, e)}
+                                  className="p-1.5 bg-white/5 hover:bg-red-500/15 text-gray-400 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
+                                  title="Remove"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Store Products List */}
+                      {favoriteProducts.length > 0 && (
+                        <div className="space-y-3">
+                          <span className="text-[10px] font-mono uppercase font-black text-brand-primary tracking-widest block border-b border-white/5 pb-1">
+                            {lang === 'ar' ? 'المستلزمات وقطع الغيار' : 'Store Products'}
+                          </span>
+                          {favoriteProducts.map((product) => (
+                            <div 
+                              key={product.id}
+                              className="flex items-center gap-4 bg-black/40 border border-white/5 rounded-2xl p-3 hover:border-brand-primary/25 transition-all group"
+                              dir={dir}
+                            >
+                              <div className="w-20 h-16 bg-[#111827] border border-white/10 rounded-xl overflow-hidden flex items-center justify-center p-1 relative shrink-0">
+                                <img 
+                                  src={product.image} 
+                                  alt={lang === 'ar' ? product.nameAr : product.name} 
+                                  referrerPolicy="no-referrer"
+                                  className="w-full h-full object-contain"
+                                />
+                              </div>
+
+                              <div className="flex-1 min-w-0 text-left" dir={dir}>
+                                <span className="text-[9px] font-mono font-bold tracking-wider text-brand-primary block">
+                                  {product.brand || 'Store Product'}
+                                </span>
+                                <span className="text-sm font-bold text-white truncate block font-sans" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+                                  {lang === 'ar' ? product.nameAr : product.name}
+                                </span>
+                                <span className="text-xs font-mono text-gray-400 font-bold">
+                                  {product.price.toLocaleString()} {lang === 'ar' ? 'ج.م' : 'EGP'}
+                                </span>
+                              </div>
+
+                              {/* Quick Action buttons */}
+                              <div className="flex flex-col gap-1 shrink-0">
+                                <button
+                                  onClick={() => {
+                                    setFavoritesOpen(false);
+                                    handleAddToCart(product);
+                                  }}
+                                  className="p-1.5 bg-brand-primary hover:bg-brand-accent text-[#0B0F1A] rounded-lg transition-colors cursor-pointer"
+                                  title="Add to Cart"
+                                >
+                                  <ShoppingCart className="w-3.5 h-3.5 shrink-0" />
+                                </button>
+                                <button
+                                  onClick={(e) => handleToggleFavorite(product.id, e)}
+                                  className="p-1.5 bg-white/5 hover:bg-red-500/15 text-gray-400 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
+                                  title="Remove"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   ) : (
                     // Empty showcase
                     <div className="text-center py-24 text-gray-500 space-y-3 font-mono">
@@ -1024,8 +1667,8 @@ Phone: ${bentoBookingPhone}`;
                       </p>
                       <p className="text-[11px] text-gray-500 max-w-xs mx-auto leading-relaxed font-sans normal-case text-center">
                         {lang === 'ar' 
-                          ? 'راجع الأطقم المتوفرة في المعرض واضغط على زر القلب لحفظها هنا لتقارن بينها بسرعة وبدء الحجز.'
-                          : 'Review the models & click the ❤️ icon on cards to save them here for fast comparisons and reservation actions.'
+                          ? 'راجع الأطقم المتوفرة في المعرض أو المنتجات في المتجر واضغط على زر القلب لحفظها هنا.'
+                          : 'Review the models & click the ❤️ icon on cards to save them here for fast comparisons and booking actions.'
                         }
                       </p>
                     </div>
@@ -1033,7 +1676,7 @@ Phone: ${bentoBookingPhone}`;
                 </div>
 
                 {/* Footer Controls */}
-                {favoriteBikes.length > 0 && (
+                {(favoriteBikes.length > 0 || favoriteProducts.length > 0) && (
                   <div className="p-6 border-t border-white/[0.08] bg-[#070A11]/60 space-y-3" dir={dir}>
                     <button
                       onClick={handleClearFavorites}

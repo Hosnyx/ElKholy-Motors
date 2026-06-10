@@ -167,6 +167,31 @@ export default function ContactFooter({ onScrollToSection, homepageConfig }: Foo
                     <Youtube className="w-4 h-4" />
                   </a>
                 )}
+                {/* Custom Social Links (e.g. TikTok) with custom image or initials icon */}
+                {homepageConfig.footer.customSocialLinks?.map((customLink, idx) => {
+                  if (!customLink.url) return null;
+                  return (
+                    <a 
+                      key={customLink.id || idx}
+                      href={customLink.url} 
+                      target="_blank" 
+                      rel="noreferrer"
+                      className="w-10 h-10 rounded-lg bg-white/[0.03] border border-white/5 flex items-center justify-center text-gray-400 hover:text-brand-accent hover:border-brand-accent/35 hover:bg-brand-accent/5 transition-all duration-300 overflow-hidden"
+                      aria-label={customLink.name}
+                    >
+                      {customLink.iconUrl ? (
+                        <img 
+                          src={customLink.iconUrl} 
+                          alt={customLink.name} 
+                          className="w-5 h-5 object-contain" 
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <span className="text-[10px] uppercase font-mono font-black tracking-wider text-brand-secondary">{customLink.name.slice(0, 2)}</span>
+                      )}
+                    </a>
+                  );
+                })}
               </div>
             </div>
 
@@ -229,19 +254,19 @@ export default function ContactFooter({ onScrollToSection, homepageConfig }: Foo
                   <MapPin className="w-5 h-5 text-brand-accent shrink-0 mt-0.5" />
                   <span>
                     {lang === 'ar' ? (
-                      <>أرض رقم 18، الطريق الدائري الإقليمي،<br />التجمع الخامس، القاهرة الجديدة، مصر</>
+                      homepageConfig.footer.addressAr || 'أرض رقم 18، الطريق الدائري الإقليمي، التجمع الخامس، القاهرة الجديدة، مصر'
                     ) : (
-                      <>Plot 18, Royal Zone Road,<br />Fifth Settlement, New Cairo, Egypt</>
+                      homepageConfig.footer.address || 'Plot 18, Royal Zone Road, Fifth Settlement, New Cairo, Egypt'
                     )}
                   </span>
                 </li>
                 <li className="flex items-center gap-3">
                   <Phone className="w-4 h-4 text-brand-primary shrink-0" />
-                  <span className="font-mono text-gray-300">+20 100 7062 123</span>
+                  <span className="font-mono text-gray-300">{homepageConfig.footer.phone || "+20 100 7062 123"}</span>
                 </li>
                 <li className="flex items-center gap-3">
                   <Mail className="w-4 h-4 text-brand-secondary shrink-0" />
-                  <span className="font-mono text-gray-205">sales@elkholymotors.com</span>
+                  <span className="font-mono text-gray-205">{homepageConfig.footer.email || "sales@elkholymotors.com"}</span>
                 </li>
               </ul>
             </div>
@@ -254,15 +279,27 @@ export default function ContactFooter({ onScrollToSection, homepageConfig }: Foo
               <div className="space-y-3 text-xs text-gray-400 bg-white/[0.02] border border-white/5 rounded-xl p-4 font-mono">
                 <div className="flex justify-between text-xs">
                   <span>{lang === 'ar' ? 'الأحد - الخميس:' : 'SUN - THU:'}</span>
-                  <span className="text-white">10:00 AM - 10:00 PM</span>
+                  <span className="text-white">
+                    {lang === 'ar' 
+                      ? (homepageConfig.footer.hoursSunThuAr || homepageConfig.footer.hoursSunThu || "10:00 AM - 10:00 PM") 
+                      : (homepageConfig.footer.hoursSunThu || "10:00 AM - 10:00 PM")}
+                  </span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span>{lang === 'ar' ? 'الجمعة:' : 'FRIDAY:'}</span>
-                  <span className="text-brand-accent">04:00 PM - 11:00 PM</span>
+                  <span className="text-brand-accent">
+                    {lang === 'ar' 
+                      ? (homepageConfig.footer.hoursFriAr || homepageConfig.footer.hoursFri || "04:00 PM - 11:00 PM") 
+                      : (homepageConfig.footer.hoursFri || "04:00 PM - 11:00 PM")}
+                  </span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span>{lang === 'ar' ? 'السبت:' : 'SATURDAY:'}</span>
-                  <span className="text-white">11:00 AM - 09:00 PM</span>
+                  <span className="text-white">
+                    {lang === 'ar' 
+                      ? (homepageConfig.footer.hoursSatAr || homepageConfig.footer.hoursSat || "11:00 AM - 09:00 PM") 
+                      : (homepageConfig.footer.hoursSat || "11:00 AM - 09:00 PM")}
+                  </span>
                 </div>
                 <p className="text-[10px] text-gray-500 italic mt-2 border-t border-white/5 pt-2 font-sans leading-relaxed">
                   {lang === 'ar' 
@@ -279,7 +316,11 @@ export default function ContactFooter({ onScrollToSection, homepageConfig }: Foo
         {/* Closing details and copy right */}
         <div className="border-t border-white/5 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-[11px] text-gray-500 font-mono tracking-wider">
-            &copy; {new Date().getFullYear()} {lang === 'ar' ? homepageConfig.header.logoTextAr || 'الخولي موتورز' : homepageConfig.header.logoText || 'ELKHOLY MOTORS'}. {lang === 'ar' ? 'جميع الحقوق محفوظة. مشروع جراج رقمي 2026.' : 'ALL RIGHTS RESERVED. YEAR 2026 CYBER SHOWROOM PROJECT.'}
+            &copy; {new Date().getFullYear()} {lang === 'ar' ? homepageConfig.header.logoTextAr || 'الخولي موتورز' : homepageConfig.header.logoText || 'ELKHOLY MOTORS'}. {
+              lang === 'ar' 
+                ? (homepageConfig.footer.copyrightAr || 'جميع الحقوق محفوظة. مشروع جراج رقمي 2026.') 
+                : (homepageConfig.footer.copyright || 'ALL RIGHTS RESERVED. YEAR 2026 CYBER SHOWROOM PROJECT.')
+            }
           </p>
           <div className="flex items-center gap-6 text-[10px] font-mono text-gray-400">
             <span className="hover:text-brand-accent transition-colors duration-200 cursor-help uppercase">{lang === 'ar' ? 'شروط القيادة للتجارب' : 'TERMS OF RIDE'}</span>

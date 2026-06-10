@@ -48,7 +48,7 @@ export default function FilterSection({
     onFilterChange({
       searchQuery: '',
       category: 'ALL',
-      priceRange: 50000,
+      priceRange: 5000000,
       sortBy: 'default',
       onlyPopular: false,
     });
@@ -148,20 +148,20 @@ export default function FilterSection({
               <div className="flex justify-between items-center text-xs font-mono">
                 <span className="text-gray-400 tracking-wider uppercase">{t('max_budget')}</span>
                 <span className="text-brand-accent font-black">
-                  {lang === 'ar' ? `${(filters.priceRange * 50).toLocaleString()} جنيه` : `${(filters.priceRange * 50).toLocaleString()} EGP`}
+                  {lang === 'ar' ? `${filters.priceRange.toLocaleString()} جنيه` : `${filters.priceRange.toLocaleString()} EGP`}
                 </span>
               </div>
               <input
                 type="range"
-                min="10000"
-                max="100000"
+                min="5000"
+                max="5000000"
                 step="5000"
                 value={filters.priceRange}
                 onChange={handlePriceChange}
                 className="w-full accent-brand-accent"
               />
               <div className="flex justify-between text-[10px] font-mono text-gray-600">
-                <span>{lang === 'ar' ? '500,000 جنيه' : '500,000 EGP'}</span>
+                <span>{lang === 'ar' ? '5,000 جنيه' : '5,000 EGP'}</span>
                 <span>{lang === 'ar' ? '5,000,000 جنيه' : '5,000,000 EGP'}</span>
               </div>
             </div>

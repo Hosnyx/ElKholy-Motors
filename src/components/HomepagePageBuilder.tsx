@@ -3,6 +3,20 @@ import { Sparkles, Trash2, CheckCircle2, ChevronRight, Settings } from 'lucide-r
 import { HomepageConfig } from '../types';
 import { DEFAULT_HOMEPAGE_CONFIG } from '../data';
 
+const fontToCssMap: Record<string, string> = {
+  'Inter': "'Inter', 'Vazirmatn', sans-serif",
+  'Poppins': "'Poppins', 'Rubik', sans-serif",
+  'Montserrat': "'Montserrat', 'Almarai', sans-serif",
+  'Roboto': "'Roboto', 'Vazirmatn', sans-serif",
+  'Cairo': "'Cairo', sans-serif",
+  'Tajawal': "'Tajawal', sans-serif",
+  'IBM Plex Sans': "'IBM Plex Sans Arabic', 'IBM Plex Sans', sans-serif",
+  'Open Sans': "'Open Sans', 'Vazirmatn', sans-serif",
+  'Lato': "'Lato', 'Almarai', sans-serif",
+  'Nunito': "'Nunito', 'Rubik', sans-serif",
+  'Space Grotesk': "'Space Grotesk', 'Vazirmatn', sans-serif",
+};
+
 interface HomepagePageBuilderProps {
   homepageConfig: HomepageConfig;
   onUpdateHomepageConfig: (config: HomepageConfig) => void;
@@ -31,6 +45,7 @@ export default function HomepagePageBuilder({
   });
   const [newTemplateName, setNewTemplateName] = useState('');
   const [activeBuilderTab, setActiveBuilderTab] = useState<'font' | 'theme' | 'header' | 'main' | 'footer' | 'templates'>('header');
+  const [fontTarget, setFontTarget] = useState<'headings' | 'subheadings' | 'body'>('headings');
 
   useEffect(() => {
     if (homepageConfig) {
@@ -603,6 +618,24 @@ export default function HomepagePageBuilder({
                   dir="ltr"
                 />
               </div>
+
+              {/* WhatsApp Invoice Number */}
+              <div className="space-y-1 block mt-4">
+                <label className="text-green-500 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5">
+                  <span>{lang === 'ar' ? 'رقم الواتساب لاستلام الفواتير:' : 'WhatsApp Number for Invoices:'}</span>
+                </label>
+                <input 
+                  type="text"
+                  placeholder="e.g. +201012345678"
+                  value={builderConfig.invoiceWhatsappNumber || ''}
+                  onChange={(e) => updateBuilderConfig({
+                    ...builderConfig,
+                    invoiceWhatsappNumber: e.target.value
+                  })}
+                  className="w-full bg-[#111827]/80 border border-white/10 rounded-xl p-3 text-white font-mono leading-relaxed focus:outline-none"
+                  dir="ltr"
+                />
+              </div>
             </div>
           )}
 
@@ -615,7 +648,7 @@ export default function HomepagePageBuilder({
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-2">
                 <div className="space-y-1 block">
-                  <label className="text-gray-450 text-[9px] uppercase tracking-wider block">{lang === 'ar' ? 'اللون الترويجي الأساسي:' : 'Primary Brand accent:'}</label>
+                  <label className="text-gray-455 text-[9px] uppercase tracking-wider block">{lang === 'ar' ? 'اللون الترويجي الأساسي:' : 'Primary Brand accent:'}</label>
                   <div className="flex items-center gap-2">
                     <input 
                       type="color"
@@ -740,46 +773,164 @@ export default function HomepagePageBuilder({
           {activeBuilderTab === 'font' && (
             <div className="space-y-4 animate-fade-in text-left">
               <h4 className="text-[11px] font-black uppercase text-brand-secondary tracking-widest border-b border-white/5 pb-1.5 font-mono">
-                {lang === 'ar' ? 'متحكم خطوط وتيبوغرافيات الموقع الـ 10' : 'Select from 10 Modern Layout Font Families'}
+                {lang === 'ar' ? 'متحكم خطوط وتيبوغرافيات الموقع المفصلة' : 'Detailed Multi-Font Typography Controllers'}
               </h4>
-              <p className="text-[10px] text-gray-500 font-sans mt-1 leading-normal">
-                Instantly inject typographic CSS packages from CDN and override all grid widgets without styling breakages or flickering.
+              <p className="text-[10px] text-gray-550 font-sans mt-0.5 leading-normal">
+                {lang === 'ar' 
+                  ? 'اختر تخصيص خط منفصل لكل جزء من أجزاء الموقع (العناوين الكبيرة، العناوين الفرعية، نصوص الوصف والفقرات).'
+                  : 'Customize separate fonts for headings, small labels/buttons, and main body description paragraphs.'}
               </p>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+              {/* Sub-tabs selector for font target scope */}
+              <div className="grid grid-cols-3 gap-1 bg-[#111827]/85 p-1 rounded-xl border border-white/5 mt-3">
+                <button
+                  type="button"
+                  onClick={() => setFontTarget('headings')}
+                  className={`py-2 px-1 text-[10px] font-black tracking-wider uppercase rounded-lg transition-all cursor-pointer flex flex-col items-center justify-center text-center leading-none ${
+                    fontTarget === 'headings'
+                      ? 'bg-brand-primary text-white shadow-md shadow-brand-primary/20 font-bold'
+                      : 'text-gray-400 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <span className="text-[9px] font-extrabold">{lang === 'ar' ? 'العناوين الرئيسية' : 'Headings'}</span>
+                  <span className="text-[7.5px] opacity-75 font-mono mt-1 text-center truncate max-w-[100px]" dir="ltr">
+                    {builderConfig.fontHeadings || builderConfig.font || 'Space Grotesk'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFontTarget('subheadings')}
+                  className={`py-2 px-1 text-[10px] font-black tracking-wider uppercase rounded-lg transition-all cursor-pointer flex flex-col items-center justify-center text-center leading-none ${
+                    fontTarget === 'subheadings'
+                      ? 'bg-brand-secondary text-white shadow-md shadow-brand-secondary/20 font-bold'
+                      : 'text-gray-400 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <span className="text-[9px] font-extrabold">{lang === 'ar' ? 'العناوين الفرعية' : 'Subheadings'}</span>
+                  <span className="text-[7.5px] opacity-75 font-mono mt-1 text-center truncate max-w-[100px]" dir="ltr">
+                    {builderConfig.fontSubheadings || builderConfig.font || 'Cairo'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFontTarget('body')}
+                  className={`py-2 px-1 text-[10px] font-black tracking-wider uppercase rounded-lg transition-all cursor-pointer flex flex-col items-center justify-center text-center leading-none ${
+                    fontTarget === 'body'
+                      ? 'bg-[#22D3EE] text-black shadow-md shadow-[#22D3EE]/20 font-extrabold'
+                      : 'text-gray-400 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <span className="text-[9px] font-extrabold">{lang === 'ar' ? 'النصوص والوصف' : 'Body Text'}</span>
+                  <span className="text-[7.5px] opacity-75 font-mono mt-1 text-center truncate max-w-[100px]" dir="ltr">
+                    {builderConfig.fontBody || builderConfig.font || 'Inter'}
+                  </span>
+                </button>
+              </div>
+
+              {/* Dynamic instruction for the selected font category */}
+              <div className="bg-white/[0.01] border border-white/5 rounded-xl p-2.5 text-center text-[10px] text-gray-400 font-sans mt-2">
+                {fontTarget === 'headings' && (
+                  <span>
+                    👉 {lang === 'ar' 
+                      ? 'تعديل خط العناوين الرئيسية الكبيرة (مثل اسم المعرض في الهيدر، وعناوين الفئات والأقسام).' 
+                      : 'Configuring main hero labels, large module section titles, and header text.'}
+                  </span>
+                )}
+                {fontTarget === 'subheadings' && (
+                  <span>
+                    👉 {lang === 'ar' 
+                      ? 'تعديل خط العناوين الفرعية، الأزرار، الشارات، وأقسام التصفية واللوجو الفرعي للمترو.' 
+                      : 'Configuring categories slots, primary filter pills, badges, and action buttons.'}
+                  </span>
+                )}
+                {fontTarget === 'body' && (
+                  <span>
+                    👉 {lang === 'ar' 
+                      ? 'تعديل خط النصوص العادية، فقرات الوصف داخل الكروت، التفاصيل التقنية، وفوتر المعرض.' 
+                      : 'Configuring standard paragraph specifications, item details, catalogs context, and footer info.'}
+                  </span>
+                )}
+              </div>
+
+              {/* The 10 fonts list */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
                 {([
-                  { name: 'Inter', desc: 'Sleek, Swiss highly legible technology display' },
-                  { name: 'Poppins', desc: 'Modern energetic geometric sans-serif standard' },
-                  { name: 'Montserrat', desc: 'Architecturally bold structural display' },
-                  { name: 'Cairo', desc: 'High contrast standard for contemporary Arabic' },
-                  { name: 'Tajawal', desc: 'Elegant slim high-contrast editorial arabic' },
-                  { name: 'IBM Plex Sans', desc: 'Engineering-inspired professional system font' },
-                  { name: 'Open Sans', desc: 'Highly balanced neutral consumer layout' },
-                  { name: 'Lato', desc: 'Warm structural display typography standard' },
-                  { name: 'Nunito', desc: 'Curved friendly consumer interactive font' },
-                  { name: 'Space Grotesk', desc: 'Futuristic modern brutalist tech display' }
+                  { name: 'Inter', desc: lang === 'ar' ? 'الخط السويسري الأنيق والقابل للقراءة العالية' : 'Sleek, Swiss highly legible technology display' },
+                  { name: 'Poppins', desc: lang === 'ar' ? 'هندسي حديث ملائم لواجهات المستقبل' : 'Modern energetic geometric sans-serif standard' },
+                  { name: 'Montserrat', desc: lang === 'ar' ? 'عريض وجريء، مخصص للعناوين اللافتة' : 'Architecturally bold structural display' },
+                  { name: 'Cairo', desc: lang === 'ar' ? 'الخط العربي المعاصر الأكثر شعبية وقوة' : 'High contrast standard for contemporary Arabic' },
+                  { name: 'Tajawal', desc: lang === 'ar' ? 'خط عربي نحيف وأنيق ذو طابع تحريري متميز' : 'Elegant slim high-contrast editorial arabic' },
+                  { name: 'IBM Plex Sans', desc: lang === 'ar' ? 'خط كود تقني احترافي عالي الدقة' : 'Engineering-inspired professional system font' },
+                  { name: 'Open Sans', desc: lang === 'ar' ? 'تصميم كلاسيكي نظيف ومريح للعين' : 'Highly balanced neutral consumer layout' },
+                  { name: 'Lato', desc: lang === 'ar' ? 'خط تكنولوجي ملائم للنصوص الفرعية والفقرات' : 'Warm structural display typography standard' },
+                  { name: 'Nunito', desc: lang === 'ar' ? 'خط مستدير يعطي حيوية وتفاعلية للموقع' : 'Curved friendly consumer interactive font' },
+                  { name: 'Space Grotesk', desc: lang === 'ar' ? 'خط مستقبلي بلمسة من تصميم Brutalist الهندسي للموتوسيكلات' : 'Futuristic modern brutalist tech display' }
                 ] as const).map((f) => {
-                  const isSel = builderConfig.font === f.name;
+                  const isSel = (fontTarget === 'headings' 
+                    ? builderConfig.fontHeadings || builderConfig.font || 'Space Grotesk'
+                    : fontTarget === 'subheadings'
+                      ? builderConfig.fontSubheadings || builderConfig.font || 'Cairo'
+                      : builderConfig.fontBody || builderConfig.font || 'Inter') === f.name;
                   return (
                     <button
                       key={f.name}
                       type="button"
-                      onClick={() => updateBuilderConfig({
-                        ...builderConfig,
-                        font: f.name
-                      })}
-                      className={`p-3.5 border rounded-xl transition-all cursor-pointer flex flex-col text-left ${
+                      onClick={() => {
+                        if (fontTarget === 'headings') {
+                          updateBuilderConfig({ ...builderConfig, fontHeadings: f.name });
+                        } else if (fontTarget === 'subheadings') {
+                          updateBuilderConfig({ ...builderConfig, fontSubheadings: f.name });
+                        } else {
+                          updateBuilderConfig({ ...builderConfig, fontBody: f.name });
+                        }
+                        fireToast(
+                          lang === 'ar' 
+                            ? `تم تغيير خط ${fontTarget === 'headings' ? 'العناوين الرئيسية' : fontTarget === 'subheadings' ? 'العناوين الفرعية' : 'النصوص والوصف'} إلى: ${f.name}` 
+                            : `Updated ${fontTarget} typography layout to: ${f.name}`, 
+                          'success'
+                        );
+                      }}
+                      className={`p-3 border rounded-xl transition-all cursor-pointer flex flex-col text-left ${
                         isSel 
-                          ? 'bg-brand-primary/20 border-brand-primary text-white shadow-xl' 
+                          ? fontTarget === 'headings' 
+                            ? 'bg-brand-primary/20 border-brand-primary text-white shadow-md' 
+                            : fontTarget === 'subheadings'
+                              ? 'bg-brand-secondary/20 border-brand-secondary text-white shadow-md'
+                              : 'bg-[#22D3EE]/20 border-[#22D3EE] text-white shadow-md'
                           : 'bg-white/[0.02] border-white/5 hover:border-white/10 text-gray-400 hover:text-white'
                       }`}
                     >
-                      <span className="font-bold text-xs" style={{ fontFamily: `"${f.name}", sans-serif` }}>{f.name}</span>
-                      <span className="text-[9px] text-gray-500 font-sans mt-0.5">{f.desc}</span>
+                      <span className={`font-bold text-xs font-preview-${f.name.replace(/\s+/g, '')}`} style={{ fontFamily: fontToCssMap[f.name] || `"${f.name}", sans-serif` }}>{f.name}</span>
+                      <span className={`text-[9px] text-gray-550 mt-0.5 leading-tight font-preview-${f.name.replace(/\s+/g, '')}`} style={{ fontFamily: fontToCssMap[f.name] || `"${f.name}", sans-serif` }}>{f.desc}</span>
                     </button>
                   );
                 })}
               </div>
+
+              {/* Real-time typography preview card */}
+              <div className="p-4 rounded-xl border border-white/5 bg-[#111827]/40 block text-left space-y-2 mt-4">
+                <span className="text-[8px] font-bold text-gray-500 uppercase tracking-widest block">{lang === 'ar' ? 'معاينة خطوط الواجهة الحالية بالفهرس:' : 'ACTIVE TYPOGRAPHY MIX MATRIX:'}</span>
+                
+                {/* Heading style preview */}
+                <div className={`text-sm font-black text-white font-preview-${(builderConfig.fontHeadings || builderConfig.font || 'Space Grotesk').replace(/\s+/g, '')}`} style={{ fontFamily: fontToCssMap[builderConfig.fontHeadings || builderConfig.font || 'Space Grotesk'] || `"${builderConfig.fontHeadings || builderConfig.font || 'Space Grotesk'}", sans-serif` }}>
+                  {lang === 'ar' ? 'الخولي موتورز - معرض المستقبل بمصر' : 'ELKHOLY MOTORS - FUTURE SHOWROOM'}
+                </div>
+
+                {/* Subheadings preview */}
+                <div className={`text-[11px] font-extrabold text-[#22D3EE] font-preview-${(builderConfig.fontSubheadings || builderConfig.font || 'Cairo').replace(/\s+/g, '')}`} style={{ fontFamily: fontToCssMap[builderConfig.fontSubheadings || builderConfig.font || 'Cairo'] || `"${builderConfig.fontSubheadings || builderConfig.font || 'Cairo'}", sans-serif` }}>
+                  ⚡ {lang === 'ar' ? 'أقوى الموتوسيكلات والاسكوترز الذكية' : 'SUPREME PERFORMANCE ELECTRIC & GAS SUPERBIKES'}
+                </div>
+
+                {/* Body paragraph preview */}
+                <div className={`text-[10px] text-gray-400 leading-normal mt-2 font-preview-${(builderConfig.fontBody || builderConfig.font || 'Inter').replace(/\s+/g, '')}`} style={{ fontFamily: fontToCssMap[builderConfig.fontBody || builderConfig.font || 'Inter'] || `"${builderConfig.fontBody || builderConfig.font || 'Inter'}", sans-serif` }}>
+                  {lang === 'ar' 
+                    ? 'هذا النص يعبر عن الوصف الدقيق وكافة كروت الموتوسيكلات وساعات العمل وملاحظات العروض الحصرية الحالية.' 
+                    : 'This is a sample layout description showing user details inside motorcycle specs cards and general catalog features.'}
+                </div>
+              </div>
+
             </div>
           )}
 
@@ -971,6 +1122,329 @@ export default function HomepagePageBuilder({
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* CONTACT & HEADQUARTERS EDITORS */}
+              <div className="space-y-3 pt-2">
+                <span className="text-[9px] font-black uppercase text-brand-secondary tracking-widest block">{lang === 'ar' ? 'بيانات مقر المعرض ومعلومات التواصل بالكامل (Contact details):' : 'HEADQUARTERS LOCATION & CONTACT TELEMETRY:'}</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-4 bg-white/[0.02] border border-white/5 rounded-2xl text-left">
+                  
+                  {/* Address */}
+                  <div className="space-y-1 block text-left">
+                    <label className="text-gray-400 text-[10px] uppercase block">{lang === 'ar' ? 'العنوان بمصر (عربي):' : 'Egyptian Address (Arabic)'}</label>
+                    <input 
+                      type="text" 
+                      value={builderConfig.footer.addressAr || ''}
+                      onChange={(e) => updateBuilderConfig({
+                        ...builderConfig,
+                        footer: { ...builderConfig.footer, addressAr: e.target.value }
+                      })}
+                      className="w-full bg-[#111827]/60 border border-white/10 rounded-xl px-2 py-1.5 text-white font-sans text-right focus:outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1 block text-left">
+                    <label className="text-gray-400 text-[10px] uppercase block">{lang === 'ar' ? 'العنوان (إنجليزي):' : 'Headquarters Address (English)'}</label>
+                    <input 
+                      type="text" 
+                      value={builderConfig.footer.address || ''}
+                      onChange={(e) => updateBuilderConfig({
+                        ...builderConfig,
+                        footer: { ...builderConfig.footer, address: e.target.value }
+                      })}
+                      className="w-full bg-[#111827]/60 border border-white/10 rounded-xl px-2 py-1.5 text-white font-sans focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Phone & Email */}
+                  <div className="space-y-1 block text-left">
+                    <label className="text-gray-400 text-[10px] uppercase block">{lang === 'ar' ? 'رقم الهاتف:' : 'Contact Phone Number:'}</label>
+                    <input 
+                      type="text" 
+                      value={builderConfig.footer.phone || ''}
+                      onChange={(e) => updateBuilderConfig({
+                        ...builderConfig,
+                        footer: { ...builderConfig.footer, phone: e.target.value }
+                      })}
+                      className="w-full bg-[#111827]/60 border border-white/10 rounded-xl px-2 py-1.5 text-white font-mono focus:outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1 block text-left">
+                    <label className="text-gray-400 text-[10px] uppercase block">{lang === 'ar' ? 'البريد الإلكتروني:' : 'Contact E-mail Address:'}</label>
+                    <input 
+                      type="text" 
+                      value={builderConfig.footer.email || ''}
+                      onChange={(e) => updateBuilderConfig({
+                        ...builderConfig,
+                        footer: { ...builderConfig.footer, email: e.target.value }
+                      })}
+                      className="w-full bg-[#111827]/60 border border-white/10 rounded-xl px-2 py-1.5 text-white font-mono focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Working Times */}
+                  <div className="space-y-1 block text-left">
+                    <label className="text-gray-400 text-[10px] uppercase block">{lang === 'ar' ? 'ساعات العمل الأحد - الخميس:' : 'Working Hours Sun-Thu:'}</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. 10:00 AM - 10:00 PM"
+                      value={builderConfig.footer.hoursSunThu || ''}
+                      onChange={(e) => updateBuilderConfig({
+                        ...builderConfig,
+                        footer: { ...builderConfig.footer, hoursSunThu: e.target.value }
+                      })}
+                      className="w-full bg-[#111827]/60 border border-white/10 rounded-xl px-2 py-1.5 text-white focus:outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1 block text-left">
+                    <label className="text-gray-400 text-[10px] uppercase block">{lang === 'ar' ? 'ساعات العمل الأحد - الخميس (عربي اختيارى):' : 'Working Hours Sun-Thu (Arabic optional):'}</label>
+                    <input 
+                      type="text" 
+                      placeholder="مثال: 10:00 ص - 10:00 م"
+                      value={builderConfig.footer.hoursSunThuAr || ''}
+                      onChange={(e) => updateBuilderConfig({
+                        ...builderConfig,
+                        footer: { ...builderConfig.footer, hoursSunThuAr: e.target.value }
+                      })}
+                      className="w-full bg-[#111827]/60 border border-white/10 rounded-xl px-2 py-1.5 text-white text-right focus:outline-none animate-fade-in"
+                    />
+                  </div>
+
+                  {/* Hours Friday */}
+                  <div className="space-y-1 block text-left">
+                    <label className="text-gray-400 text-[10px] uppercase block">{lang === 'ar' ? 'ساعات العمل الجمعة:' : 'Working Hours Friday:'}</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. 04:00 PM - 11:00 PM"
+                      value={builderConfig.footer.hoursFri || ''}
+                      onChange={(e) => updateBuilderConfig({
+                        ...builderConfig,
+                        footer: { ...builderConfig.footer, hoursFri: e.target.value }
+                      })}
+                      className="w-full bg-[#111827]/60 border border-white/10 rounded-xl px-2 py-1.5 text-white focus:outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1 block text-left">
+                    <label className="text-gray-400 text-[10px] uppercase block">{lang === 'ar' ? 'ساعات العمل الجمعة (عربي اختيارى):' : 'Working Hours Friday (Arabic optional):'}</label>
+                    <input 
+                      type="text" 
+                      placeholder="مثال: 04:00 م - 11:00 م"
+                      value={builderConfig.footer.hoursFriAr || ''}
+                      onChange={(e) => updateBuilderConfig({
+                        ...builderConfig,
+                        footer: { ...builderConfig.footer, hoursFriAr: e.target.value }
+                      })}
+                      className="w-full bg-[#111827]/60 border border-white/10 rounded-xl px-2 py-1.5 text-white text-right focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Hours Saturday */}
+                  <div className="space-y-1 block text-left">
+                    <label className="text-gray-400 text-[10px] uppercase block">{lang === 'ar' ? 'ساعات العمل السبت:' : 'Working Hours Saturday:'}</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. 11:00 AM - 09:00 PM"
+                      value={builderConfig.footer.hoursSat || ''}
+                      onChange={(e) => updateBuilderConfig({
+                        ...builderConfig,
+                        footer: { ...builderConfig.footer, hoursSat: e.target.value }
+                      })}
+                      className="w-full bg-[#111827]/60 border border-white/10 rounded-xl px-2 py-1.5 text-white focus:outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1 block text-left">
+                    <label className="text-gray-400 text-[10px] uppercase block">{lang === 'ar' ? 'ساعات العمل السبت (عربي اختيارى):' : 'Working Hours Saturday (Arabic optional):'}</label>
+                    <input 
+                      type="text" 
+                      placeholder="مثال: 11:00 ص - 09:00 م"
+                      value={builderConfig.footer.hoursSatAr || ''}
+                      onChange={(e) => updateBuilderConfig({
+                        ...builderConfig,
+                        footer: { ...builderConfig.footer, hoursSatAr: e.target.value }
+                      })}
+                      className="w-full bg-[#111827]/60 border border-white/10 rounded-xl px-2 py-1.5 text-white text-right focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Copyright */}
+                  <div className="space-y-1 block text-left">
+                    <label className="text-gray-400 text-[10px] uppercase block">{lang === 'ar' ? 'حقوق النشر والملكيات (عربي):' : 'Copyright message (Arabic)'}</label>
+                    <input 
+                      type="text" 
+                      value={builderConfig.footer.copyrightAr || ''}
+                      onChange={(e) => updateBuilderConfig({
+                        ...builderConfig,
+                        footer: { ...builderConfig.footer, copyrightAr: e.target.value }
+                      })}
+                      className="w-full bg-[#111827]/60 border border-white/10 rounded-xl px-2 py-1.5 text-white text-right focus:outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1 block text-left">
+                    <label className="text-gray-400 text-[10px] uppercase block">{lang === 'ar' ? 'حقوق النشر والملكيات (إنجليزي):' : 'Copyright message (English)'}</label>
+                    <input 
+                      type="text" 
+                      value={builderConfig.footer.copyright || ''}
+                      onChange={(e) => updateBuilderConfig({
+                        ...builderConfig,
+                        footer: { ...builderConfig.footer, copyright: e.target.value }
+                      })}
+                      className="w-full bg-[#111827]/60 border border-white/10 rounded-xl px-2 py-1.5 text-white focus:outline-none"
+                    />
+                  </div>
+
+                </div>
+              </div>
+
+              {/* DYNAMIC CUSTOM SOCIAL NETWORKS */}
+              <div className="space-y-2.5 pt-3 border-t border-white/[0.05]">
+                <div className="flex justify-between items-center text-left">
+                  <div className="block">
+                    <span className="text-[10px] font-black uppercase text-[#22D3EE] tracking-widest block">{lang === 'ar' ? 'قنوات تواصل إضافية مخصصة (تيك توك، إلخ):' : 'ADDITIONAL SOCIAL TARGET NETWORKS (TIKTOK, ETC.):'}</span>
+                    <p className="text-[8px] text-gray-500 mt-0.5">{lang === 'ar' ? 'يمكنك رفع أيقونات مخصصة لكل منصة وحفظ رابطها.' : 'Provide custom logos and profile URLs for secondary accounts.'}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newList = [...(builderConfig.footer.customSocialLinks || [])];
+                      newList.push({
+                        id: 'custom-' + Date.now(),
+                        name: 'TikTok',
+                        url: '',
+                        iconUrl: ''
+                      });
+                      updateBuilderConfig({
+                        ...builderConfig,
+                        footer: {
+                          ...builderConfig.footer,
+                          customSocialLinks: newList
+                        }
+                      });
+                      fireToast(lang === 'ar' ? 'تمت إضافة تواصل مخصص جديد!' : 'Added alternative social link placeholder!', 'success');
+                    }}
+                    className="px-3 py-1.5 text-[9px] font-black tracking-wider bg-brand-primary hover:brightness-110 text-white uppercase rounded-lg transition-all cursor-pointer"
+                  >
+                    + {lang === 'ar' ? 'إضافة وسيلة مخصصة' : 'ADD DYNAMIC LINK'}
+                  </button>
+                </div>
+
+                {(!builderConfig.footer.customSocialLinks || builderConfig.footer.customSocialLinks.length === 0) ? (
+                  <div className="text-center p-5 bg-white/[0.01] border border-white/5 border-dashed rounded-2xl block">
+                    <p className="text-xs text-gray-505">{lang === 'ar' ? 'اضغط على زر الإضافة لتشغيل قنوات أخرى مخصصة (مثل تيك توك) بمصر.' : 'No additional links defined. Boost client navigation by establishing TikTok pages.'}</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {builderConfig.footer.customSocialLinks.map((custom, idx) => (
+                      <div key={custom.id || idx} className="p-4 bg-[#0B0F19]/40 border border-white/5 rounded-2xl space-y-3 relative text-left">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const filtered = builderConfig.footer.customSocialLinks?.filter((_, i) => i !== idx) || [];
+                            updateBuilderConfig({
+                              ...builderConfig,
+                              footer: {
+                                ...builderConfig.footer,
+                                customSocialLinks: filtered
+                              }
+                            });
+                            fireToast(lang === 'ar' ? 'تم مسح وسيلة التواصل' : 'Removed custom channel', 'info');
+                          }}
+                          className="absolute top-4 right-4 text-gray-400 hover:text-red-505 cursor-pointer p-1"
+                          title={lang === 'ar' ? 'حذف' : 'Delete'}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-left">
+                          <div className="space-y-1 block text-left">
+                            <span className="text-[9px] text-gray-400 font-bold uppercase">{lang === 'ar' ? 'اسم المنصة (كـ تيك توك):' : 'Platform Identity:'}</span>
+                            <input 
+                              type="text" 
+                              value={custom.name}
+                              onChange={(e) => {
+                                const list = [...(builderConfig.footer.customSocialLinks || [])];
+                                list[idx] = { ...list[idx], name: e.target.value };
+                                updateBuilderConfig({
+                                  ...builderConfig,
+                                  footer: { ...builderConfig.footer, customSocialLinks: list }
+                                });
+                              }}
+                              className="w-full bg-[#111827]/60 border border-white/10 rounded-xl px-2.5 py-1.5 text-white text-xs focus:outline-none"
+                            />
+                          </div>
+
+                          <div className="space-y-1 block text-left">
+                            <span className="text-[9px] text-[#A855F7] font-bold uppercase">{lang === 'ar' ? 'رابط الصفحة الشخصية URL:' : 'Platform Destination Web URL:'}</span>
+                            <input 
+                              type="text" 
+                              placeholder="https://tiktok.com/@..."
+                              value={custom.url}
+                              onChange={(e) => {
+                                const list = [...(builderConfig.footer.customSocialLinks || [])];
+                                list[idx] = { ...list[idx], url: e.target.value };
+                                updateBuilderConfig({
+                                  ...builderConfig,
+                                  footer: { ...builderConfig.footer, customSocialLinks: list }
+                                });
+                              }}
+                              className="w-full bg-[#111827]/60 border border-white/10 rounded-xl px-2.5 py-1.5 text-white text-xs focus:outline-none font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        {/* File image Base64 logo direct inputs */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-left border-t border-white/5 pt-3">
+                          <div className="space-y-1 block text-left">
+                            <span className="text-[9px] text-gray-400 font-bold uppercase">{lang === 'ar' ? 'أو رابط مباشر للأيقونة (URL):' : 'Platform Icon Image Link URL:'}</span>
+                            <input 
+                              type="text" 
+                              placeholder="https://icon-cloud.com/tiktok.png"
+                              value={custom.iconUrl || ''}
+                              onChange={(e) => {
+                                const list = [...(builderConfig.footer.customSocialLinks || [])];
+                                list[idx] = { ...list[idx], iconUrl: e.target.value };
+                                updateBuilderConfig({
+                                  ...builderConfig,
+                                  footer: { ...builderConfig.footer, customSocialLinks: list }
+                                });
+                              }}
+                              className="w-full bg-[#111827]/60 border border-white/10 rounded-xl px-2.5 py-1.5 text-white text-xs focus:outline-none font-mono"
+                            />
+                          </div>
+
+                          <div className="space-y-1 block text-left">
+                            <span className="text-[9px] text-[#22D3EE] font-bold uppercase">{lang === 'ar' ? 'رفع ملف أيقونة شعار المنصة من جهازك:' : 'Or Upload Device Logo (PNG/SVG):'}</span>
+                            <div className="flex items-center gap-2">
+                              {custom.iconUrl && (
+                                <img src={custom.iconUrl} alt="custom icon logo" className="w-8 h-8 object-contain bg-white/5 border border-white/10 rounded-lg p-1" referrerPolicy="no-referrer" />
+                              )}
+                              <input 
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => {
+                                      const list = [...(builderConfig.footer.customSocialLinks || [])];
+                                      list[idx] = { ...list[idx], iconUrl: reader.result as string };
+                                      updateBuilderConfig({
+                                        ...builderConfig,
+                                        footer: { ...builderConfig.footer, customSocialLinks: list }
+                                      });
+                                      fireToast(lang === 'ar' ? 'تم رفع أيقونة المنصة بنجاح!' : 'Platform logo uploaded successfully', 'success');
+                                    };
+                                    reader.readAsDataURL(file);
+                                  }
+                                }}
+                                className="flex-1 bg-white/5 border border-white/10 rounded-xl p-1 text-gray-400 text-xs file:bg-brand-secondary file:border-none file:text-white file:px-2.5 file:py-0.5 file:rounded-md file:text-[9px] file:cursor-pointer"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
