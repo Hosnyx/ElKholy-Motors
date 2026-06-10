@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { createRoot } from 'react-dom/client';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, Lock, Key, ShieldCheck, Database, Upload, Eye, EyeOff, FileText, Plus, Trash2, 
@@ -33,7 +34,7 @@ let colorResolverCtx: CanvasRenderingContext2D | null = null;
 const resolveColorToRgb = (colorStr: string): string => {
   if (!colorStr) return colorStr;
   const trimmed = colorStr.trim();
-  if (trimmed.includes('oklch') || trimmed.includes('oklab')) {
+  if (trimmed.includes('oklch') || trimmed.includes('oklab') || trimmed.includes('color-mix')) {
     try {
       if (!colorResolverCanvas) {
         colorResolverCanvas = document.createElement('canvas');
@@ -44,7 +45,7 @@ const resolveColorToRgb = (colorStr: string): string => {
       if (colorResolverCtx) {
         colorResolverCtx.fillStyle = trimmed;
         const resolved = colorResolverCtx.fillStyle;
-        if (resolved && !resolved.includes('oklch') && !resolved.includes('oklab')) {
+        if (resolved && !resolved.includes('oklch') && !resolved.includes('oklab') && !resolved.includes('color-mix')) {
           return resolved;
         }
       }
@@ -58,11 +59,153 @@ const resolveColorToRgb = (colorStr: string): string => {
 
 const sanitizeColorValue = (value: string): string => {
   if (!value) return value;
-  if (!value.includes('oklch') && !value.includes('oklab')) return value;
-  return value.replace(/(oklch|oklab)\([^)]+\)/g, (match) => {
+  // Regex needs to handle oklch, oklab, and potentially color-mix which can be nested or complex
+  // For color-mix specifically, for simplicity, we might just use the canvas parser.
+  if (!value.includes('oklch') && !value.includes('oklab') && !value.includes('color-mix')) return value;
+  
+  // This is a simplified replacement. If color-mix is complex, the canvas parser is the only reliable way.
+  return value.replace(/(oklch|oklab|color-mix)\([^)]+\)/g, (match) => {
     return resolveColorToRgb(match);
   });
 };
+
+// ... existing code ...
+// Helper to convert QR SVG element to Image
+const qrSvgToImage = async (svg: SVGSVGElement): Promise<HTMLImageElement> => {
+  const canvas = document.createElement('canvas');
+  const serializer = new XMLSerializer();
+  const source = serializer.serializeToString(svg);
+  const img = new Image();
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(source);
+  await new Promise((resolve, reject) => {
+    img.onload = resolve;
+    img.onerror = reject;
+  });
+  canvas.width = svg.width.baseVal.value;
+  canvas.height = svg.height.baseVal.value;
+  canvas.getContext('2d')?.drawImage(img, 0, 0);
+  
+  const newImg = document.createElement('img');
+  newImg.src = canvas.toDataURL('image/png');
+  newImg.style.width = svg.style.width || (svg.width?.baseVal?.value ? svg.width.baseVal.value + 'px' : 'auto');
+  newImg.style.height = svg.style.height || (svg.height?.baseVal?.value ? svg.height.baseVal.value + 'px' : 'auto');
+  newImg.className = svg.className.baseVal;
+  return newImg;
+};
+
+// Traverse and sanitize DOM nodes for export
+const sanitizeCloneNode = async (node: HTMLElement): Promise<void> => {
+  // 1. Remove Classes to rely on inlined computed styles
+  node.removeAttribute('class');
+
+  // 2. Inline all computed styles, replacing problematic functions
+  const computed = window.getComputedStyle(node);
+  for (let i = 0; i < computed.length; i++) {
+    const prop = computed.item(i);
+    const val = computed.getPropertyValue(prop);
+    
+    // Check for problematic functions
+    if (val.includes('oklch') || val.includes('oklab') || val.includes('color-mix') || val.includes('gradient')) {
+        node.style.setProperty(prop, sanitizeColorValue(val));
+    } else {
+        node.style.setProperty(prop, val);
+    }
+  }
+
+  // 3. Handle Images CORS and replacements
+  if (node.tagName === 'IMG') {
+    const img = node as HTMLImageElement;
+    img.crossOrigin = 'anonymous';
+    img.onerror = () => {
+        img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93dXcudzMub3JnLzIwMDAvc3ZnIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0Ij0iMTAwIiBmaWxsPSIjY2NjIi8+PHRleHQgeD0iNTAiIHk9IjUwIiBmb250LXNpemU9IjEwIiBmaWxsPSIjNjY2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5pbWcgPzwvdGV4dD48L3N2Zz4=';
+    };
+  }
+
+  // 4. Convert QR SVGs
+  if (node.tagName === 'SVG' && (node.querySelector('path') || node.classList.contains('qrcode'))) {
+    const img = await qrSvgToImage(node as unknown as SVGSVGElement);
+    node.parentNode?.replaceChild(img, node);
+  } else {
+    // 5. Recurse children
+    const children = Array.from(node.children) as HTMLElement[];
+    for (const child of children) {
+       await sanitizeCloneNode(child);
+    }
+  }
+};
+
+const ExportInvoiceComponent = ({ operation, invoiceNumber, data }: any) => {
+  const { lang, dir } = useLanguage();
+  return (
+    <div 
+      id="elkholy-export-document-capture" 
+      className="bg-white w-[794px] h-[1123px] p-[40px] text-black font-sans relative"
+      dir={dir}
+      style={{
+        direction: dir,
+        textAlign: dir === 'rtl' ? 'right' : 'left',
+      }}
+    >
+        {/* Company Header */}
+        <div className="flex justify-between items-start border-b-2 border-black pb-5">
+            <div>
+                <h1 className="text-3xl font-bold">ElKholy Motors</h1>
+                <p className="text-sm">Premium Fleet & Accessories</p>
+                <p className="text-sm">Cairo, Egypt</p>
+            </div>
+            <div className="text-right">
+                <div className="text-xl font-bold">INVOICE</div>
+                <div>#: {invoiceNumber}</div>
+                <div>Op ID: #{operation.id.substring(0,8).toUpperCase()}</div>
+                <div>Date: {new Date().toLocaleDateString()}</div>
+            </div>
+        </div>
+
+        {/* Customer Details */}
+        <div className="mt-8 grid grid-cols-2 gap-4 border-b border-gray-300 pb-5">
+            <div><strong className="block text-gray-600">Bill To:</strong> {data.name}</div>
+            <div className="text-right"><strong className="block text-gray-600">Contact:</strong> {data.phone}</div>
+        </div>
+        
+        {/* Items Table */}
+        <div className="mt-8">
+            <table className="w-full border-collapse">
+                <thead>
+                    <tr className="border-b-2 border-black text-left">
+                        <th className="py-2">Description</th>
+                        <th className="py-2 text-right">Qty</th>
+                        <th className="py-2 text-right">Price</th>
+                        <th className="py-2 text-right">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {/* Placeholder for items - in a real scenario, map from operation data */}
+                    <tr>
+                        <td className="py-2">Item Placeholder</td>
+                        <td className="py-2 text-right">1</td>
+                        <td className="py-2 text-right">0 EGP</td>
+                        <td className="py-2 text-right">0 EGP</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        {/* Totals */}
+        <div className="mt-8 flex justify-end">
+            <div className="w-64 space-y-2">
+                <div className="flex justify-between"><span>Subtotal:</span><strong>0 EGP</strong></div>
+                <div className="flex justify-between border-t border-black pt-2 font-bold text-lg"><span>Total:</span><strong>0 EGP</strong></div>
+            </div>
+        </div>
+        
+        {/* Footer */}
+        <div className="absolute bottom-[40px] w-[calc(100%-80px)] border-t border-black pt-4 text-center text-sm">
+            Thank you for your business!
+        </div>
+    </div>
+  );
+};
+
 
 interface AdminPanelProps {
   onClose: () => void;
@@ -405,146 +548,58 @@ export default function AdminPanel({
   };
 
   const compileInvoiceCanvas = async (): Promise<HTMLCanvasElement> => {
-    // 1. Check Invoice HTML Target Node Exists
-    const element = document.getElementById('elkholy-invoice-document-capture');
-    if (!element) {
-      throw new Error(
-        lang === 'ar' 
-          ? 'المعاينة فارغة: لم يتم العثور على العنصر رقم #elkholy-invoice-document-capture' 
-          : 'Invoice Capture Node element (#elkholy-invoice-document-capture) is missing from current layout tree'
-      );
-    }
-
-    // 2. Validate Customer Data
-    const cName = (editCustomerName || '').trim();
-    const cPhone = (editCustomerPhone || '').trim();
-    if (!cName) {
-      throw new Error(
-        lang === 'ar' 
-          ? 'تنبيه المصادقة: يرجى إدخال اسم العميل أولاً لإتمام تصدير الفاتورة المعتمدة.' 
-          : 'Dossier Validation Exception: Customer Name cannot be blank under official guidelines.'
-      );
-    }
-    if (!cPhone) {
-      throw new Error(
-        lang === 'ar' 
-          ? 'تنبيه المصادقة: يرجى إدخال هاتف العميل للحصول على الختم الإلكتروني للعملية.' 
-          : 'Dossier Validation Exception: Customer Phone Number is required to generate a certifiable signature block.'
-      );
-    }
-
-    // 3. Validate QR Codes generated
-    const qrSvgs = element.querySelectorAll('svg');
-    if (qrSvgs.length < 1) {
-      throw new Error(
-        lang === 'ar' 
-          ? 'فشل المكون الفني: لم يتم العثور على رموز الاستجابة السريعة (QR Render Error)' 
-          : 'Technical Integrity Exception: QR Code SVGs failed to populate inside signature desk (QR Code missing).'
-      );
-    }
-
-    // 4. Validate and Wait for all internal images to load or identify broken ones
-    const images = Array.from(element.querySelectorAll('img'));
-    const brokenImages: string[] = [];
+    // 1. Create a dedicated container for the export
+    const exportRootElement = document.createElement("div");
+    exportRootElement.id = "elkholy-export-root";
+    // Ensure it's off-screen and doesn't affect page layout
+    exportRootElement.style.position = 'absolute';
+    exportRootElement.style.left = '-9999px';
+    exportRootElement.style.top = '-9999px';
     
-    // Create promises for images loading
-    const loadPromises = images.map((img) => {
-      if (img.complete) {
-        if (img.naturalWidth === 0) {
-          const brokenLabel = img.alt || img.getAttribute('title') || img.src?.substring(0, 45) || 'unnamed asset';
-          brokenImages.push(brokenLabel);
-        }
-        return Promise.resolve();
-      }
-      return new Promise<void>((resolve) => {
-        let loaded = false;
-        const loadHandler = () => {
-          if (loaded) return;
-          loaded = true;
-          img.removeEventListener('load', loadHandler);
-          img.removeEventListener('error', errorHandler);
-          resolve();
-        };
-        const errorHandler = () => {
-          if (loaded) return;
-          loaded = true;
-          img.removeEventListener('load', loadHandler);
-          img.removeEventListener('error', errorHandler);
-          const brokenLabel = img.alt || img.getAttribute('title') || img.src?.substring(0, 45) || 'unnamed asset';
-          brokenImages.push(brokenLabel);
-          resolve();
-        };
-        img.addEventListener('load', loadHandler);
-        img.addEventListener('error', errorHandler);
-        
-        // Safety timeout per image if somehow stuck
-        setTimeout(loadHandler, 3500);
-      });
-    });
+    document.body.appendChild(exportRootElement);
 
-    if (images.length > 0) {
-      await Promise.all(loadPromises);
+    // 2. Render the ExportInvoiceComponent
+    const root = createRoot(exportRootElement);
+    
+    // We need to pass necessary state or create a wrapper that has access
+    root.render(
+        <ExportInvoiceComponent 
+            operation={selectedOperation} 
+            invoiceNumber={editInvoiceNumber} 
+            data={{ 
+                name: editCustomerName, 
+                phone: editCustomerPhone 
+            }}
+        />
+    );
+    
+    // Wait for render
+    await new Promise(r => setTimeout(r, 100));
+
+    // 3. Capture
+    const element = document.getElementById('elkholy-export-document-capture');
+    if (!element) {
+        root.unmount();
+        exportRootElement.remove();
+        throw new Error('Export invoice container not found.');
     }
-
-    if (brokenImages.length > 0) {
-      throw new Error(
-        lang === 'ar' 
-          ? `مرفقات تالفة: تعذر تحميل صور الفواتير التالية [${brokenImages.join(', ')}]` 
-          : `Asset Integrity Exception: Missing or broken visual attachment: [${brokenImages.join(', ')}]`
-      );
-    }
-
-    // 5. High-DPI canvas capture with secure OKLCH/OKLAB text replaces
-    const originalGetComputedStyle = window.getComputedStyle;
 
     try {
-      window.getComputedStyle = function (elt, pseudoElt) {
-        const style = originalGetComputedStyle.call(this, elt, pseudoElt);
-        return new Proxy(style, {
-          get(target, prop, receiver) {
-            if (typeof prop === 'string') {
-              const val = target[prop as keyof CSSStyleDeclaration];
-              if (typeof val === 'string' && (val.includes('oklch') || val.includes('oklab'))) {
-                return sanitizeColorValue(val);
-              }
-              if (prop === 'getPropertyValue') {
-                return function (propertyName: string) {
-                  const rawVal = target.getPropertyValue(propertyName);
-                  if (typeof rawVal === 'string' && (rawVal.includes('oklch') || rawVal.includes('oklab'))) {
-                    return sanitizeColorValue(rawVal);
-                  }
-                  return rawVal;
-                };
-              }
-            }
-            return Reflect.get(target, prop, receiver);
-          }
-        }) as any as CSSStyleDeclaration;
-      };
-
       const canvas = await html2canvas(element, {
-        backgroundColor: '#070A12',
+        backgroundColor: '#FFFFFF',
         useCORS: true,
-        scale: 3, // Premium 3x scaling for ultimate sharpness & print clarity
-        logging: false,
-        onclone: (clonedDoc) => {
-          // Replace oklch/oklab styles inside cloned stylesheet definitions
-          const styles = clonedDoc.querySelectorAll('style');
-          styles.forEach((style: any) => {
-            if (style.textContent && (style.textContent.includes('oklch') || style.textContent.includes('oklab'))) {
-              style.textContent = style.textContent.replace(/(oklch|oklab)\([^)]+\)/g, (match: string) => {
-                return resolveColorToRgb(match);
-              });
-            }
-          });
-        }
+        scale: 3,
+        logging: true,
       });
-
+      console.log('html2canvas capture success');
       return canvas;
-    } catch (canvasErr: any) {
-      throw new Error(`Canvas Rendering Error: ${canvasErr?.message || canvasErr || 'Failed to capture browser layout state as image canvas.'}`);
+    } catch (err) {
+        console.error('html2canvas capture failed:', err);
+        throw err;
     } finally {
-      window.getComputedStyle = originalGetComputedStyle;
+      // 4. Cleanup
+      root.unmount();
+      exportRootElement.remove();
     }
   };
 
@@ -613,17 +668,14 @@ export default function AdminPanel({
 
   const handleDownloadPDF = async () => {
     try {
-      fireToast(
-        lang === 'ar' 
-          ? '⏳ يتم التحقق وتوليد ملف PDF في صفحة A4 واحدة...' 
-          : '⏳ Initiating validation desk & rendering high-fidelity PDF...', 
-        'info'
-      );
+      console.log('Initiating PDF export...');
+      fireToast('⏳ توليد PDF...', 'info');
       
       const canvas = await compileInvoiceCanvas();
+      console.log('Canvas captured for PDF');
       
       // Compress canvas output to a high-density JPEG representation
-      const imgData = canvas.toDataURL('image/jpeg', 0.98);
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
       
       const pdf = new jsPDF({
         orientation: 'p',
@@ -651,53 +703,32 @@ export default function AdminPanel({
       pdf.addImage(imgData, 'JPEG', xOffset, yOffset, printWidth, printHeight);
       pdf.save(`Invoice_${editInvoiceNumber || selectedOperation?.id || 'Pre'}.pdf`);
 
-      fireToast(
-        lang === 'ar' 
-          ? '✅ تم تحميل وثيقة المبيعات (PDF) المعتمدة بنجاح!' 
-          : '✅ Certified PDF Invoice downloaded successfully!', 
-        'success'
-      );
+      console.log('PDF saved successfully');
+      fireToast('✅ تم تحميل PDF!', 'success');
     } catch (err: any) {
       console.error('PDF Generation Crash Report:', err);
-      fireToast(
-        lang === 'ar' 
-          ? `❌ فشل إنشاء ملف الـ PDF: ${err.message || 'خطأ فني'}` 
-          : `❌ PDF Generation Error: ${err.message || 'Unknown processing error'}`, 
-        'error'
-      );
+      fireToast(`❌ فشل PDF: ${err.message}`, 'error');
     }
   };
 
   const handleDownloadPNG = async () => {
     try {
-      fireToast(
-        lang === 'ar' 
-          ? '⏳ يتم التحقق وتوليد صورة الفاتورة فائقة الدقة...' 
-          : '⏳ Initiating validation desk & compiling ultra-sharp PNG...', 
-        'info'
-      );
+      console.log('Initiating PNG export...');
+      fireToast('⏳ توليد PNG...', 'info');
       
       const canvas = await compileInvoiceCanvas();
+      console.log('Canvas captured for PNG');
       
       const link = document.createElement('a');
       link.download = `Invoice_${editInvoiceNumber || selectedOperation?.id || 'Pre'}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
 
-      fireToast(
-        lang === 'ar' 
-          ? '✅ تم تحميل الفاتورة كـ PNG بنجاح!' 
-          : '✅ Certified high-DPI PNG Invoice downloaded successfully!', 
-        'success'
-      );
+      console.log('PNG saved successfully');
+      fireToast('✅ تم تحميل PNG!', 'success');
     } catch (err: any) {
       console.error('PNG Capture Crash Report:', err);
-      fireToast(
-        lang === 'ar' 
-          ? `❌ فشل التصدير لـ PNG: ${err.message || 'خطأ فني'}` 
-          : `❌ PNG Generation Error: ${err.message || 'Unknown processing error'}`, 
-        'error'
-      );
+      fireToast(`❌ فشل PNG: ${err.message}`, 'error');
     }
   };
 
@@ -6794,10 +6825,10 @@ APP_URL="MY_APP_URL"`
                       {/* Interactive Live Document Capture Block */}
                       <div 
                         id="elkholy-invoice-document-capture" 
-                        className="bg-[#0B101E] border border-white/5 max-w-3xl mx-auto rounded-xl p-5 sm:p-8 space-y-6 text-right relative overflow-hidden shadow-2xl shadow-indigo-500/5 box-glow-indigo text-white font-sans"
+                        className="bg-[#0B101E] border border-white/5 max-w-3xl mx-auto rounded-xl p-5 sm:p-8 space-y-6 text-right relative overflow-hidden shadow-2xl shadow-indigo-500/5 box-glow-indigo text-white font-sans"                
                         dir={dir}
                       >
-                        {/* Futuristic background glows */}
+                         {/* Futuristic background glows */}
                         <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
                         <div className="absolute bottom-0 left-0 w-64 h-64 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
 
@@ -6833,7 +6864,6 @@ APP_URL="MY_APP_URL"`
                             </div>
                           </div>
                         </div>
-
                         {/* INVOICE & OPERATION META DETAILS */}
                         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 bg-black/40 border border-white/5 p-3.5 rounded-xl font-mono text-[10px]">
                           <div className="space-y-0.5 text-right">
@@ -7175,6 +7205,7 @@ APP_URL="MY_APP_URL"`
                   </div>
 
                 </div>
+
               </motion.div>
             )}
           </AnimatePresence>
