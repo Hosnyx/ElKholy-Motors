@@ -318,6 +318,7 @@ Total Price: ${formattedTotal}`;
               src={bike.image}
               alt={bike.name}
               referrerPolicy="no-referrer"
+              onError={(e: any) => { e.target.src = 'https://images.unsplash.com/photo-1599819811279-d5ad9cccf838?auto=format&fit=crop&q=80&w=200'; }}
               className="w-full h-full object-contain p-4 group-hover:scale-105 transition-transform duration-500 select-none"
             />
           </div>

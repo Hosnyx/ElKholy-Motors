@@ -3,17 +3,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, Lock, Key, ShieldCheck, Database, Upload, Eye, EyeOff, FileText, Plus, Trash2, 
   Edit2, Check, Sparkles, FolderOpen, Users, Settings, AlertCircle, TrendingUp, 
   Coins, Activity, Calendar, MessageSquare, ArrowUpRight, CheckCircle2,
-  Trash, LogOut, ShieldAlert, ShoppingBag, Package, Download, Search, Github, Link, RefreshCw, Code, MapPin, User, Copy, Printer, Shield, Maximize2, Minimize2, Send, Mail, Image as ImageIcon
+  Trash, LogOut, ShieldAlert, ShoppingBag, Package, Download, Search, Github, Link, RefreshCw, Code, MapPin, User, Copy, Printer, Shield, Maximize2, Minimize2, Send, Mail, Image as ImageIcon, Wrench
 } from 'lucide-react';
 import { Motorcycle, CategorySlug, UserRole, UserAccount, AddOn, HomepageConfig, StoreProduct, StoreCategory } from '../types';
-import { useLanguage } from '../context/LanguageContext';
+import { useLanguage, LanguageProvider } from '../context/LanguageContext';
 import { DEFAULT_HOMEPAGE_CONFIG } from '../data';
 import HomepagePageBuilder from './HomepagePageBuilder';
 import StoreAdminPanel from './StoreAdminPanel';
@@ -24,188 +24,222 @@ import * as Recharts from 'recharts';
 import * as Docx from 'docx';
 import { QRCodeSVG } from 'qrcode.react';
 import JSZip from 'jszip';
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
+// html2canvas import removed
+
+
 
 // Helper to resolve oklch/oklab colors using browser's built-in canvas parser to avoid html2canvas crash
-let colorResolverCanvas: HTMLCanvasElement | null = null;
-let colorResolverCtx: CanvasRenderingContext2D | null = null;
 
-const resolveColorToRgb = (colorStr: string): string => {
-  if (!colorStr) return colorStr;
-  const trimmed = colorStr.trim();
-  if (trimmed.includes('oklch') || trimmed.includes('oklab') || trimmed.includes('color-mix')) {
+
+
+const oklchToRgb = (l: number, c: number, h: number, a: number = 1): string => {
+  const hRad = (h * Math.PI) / 180;
+  
+  const l_ = l;
+  const a_ = c * Math.cos(hRad);
+  const b_ = c * Math.sin(hRad);
+  
+  const l_E = l_ + 0.3963377774 * a_ + 0.2158037573 * b_;
+  const m_E = l_ - 0.1055613458 * a_ - 0.0638541728 * b_;
+  const s_E = l_ - 0.0894841775 * a_ - 1.2914855378 * b_;
+  
+  const l_cube = l_E * l_E * l_E;
+  const m_cube = m_E * m_E * m_E;
+  const s_cube = s_E * s_E * s_E;
+  
+  const x = +4.0767416621 * l_cube - 3.3077115913 * m_cube + 0.2309699292 * s_cube;
+  const y = -1.2684380046 * l_cube + 2.6097574011 * m_cube - 0.3413193965 * s_cube;
+  const z = -0.0041960863 * l_cube - 0.7034186145 * m_cube + 1.7076146140 * s_cube;
+  
+  let r = +3.2404542 * x - 1.5371385 * y - 0.4985314 * z;
+  let g = -0.9692660 * x + 1.8760108 * y + 0.0415560 * z;
+  let b =  0.0556434 * x - 0.2040259 * y + 1.0572252 * z;
+  
+  const f = (val: number) => {
+    if (val <= 0.0031308) return 12.92 * val;
+    return 1.055 * Math.pow(val, 1 / 2.4) - 0.055;
+  };
+  
+  let R = Math.round(Math.max(0, Math.min(1, f(r))) * 255);
+  let G = Math.round(Math.max(0, Math.min(1, f(g))) * 255);
+  let B = Math.round(Math.max(0, Math.min(1, f(b))) * 255);
+  
+  if (a < 1) {
+    return `rgba(${R}, ${G}, ${B}, ${a})`;
+  }
+  return `rgb(${R}, ${G}, ${B})`;
+};
+
+const parseOklchExpression = (str: string): string => {
+  const oklchRegex = /oklch\(\s*([\d.%]+)\s+([\d.%]+)\s+([\d.%deg]+)(?:\s*[\/,\s]\s*([\d.%]+))?\s*\)/gi;
+  return str.replace(oklchRegex, (match, lStr, cStr, hStr, aStr) => {
     try {
-      if (!colorResolverCanvas) {
-        colorResolverCanvas = document.createElement('canvas');
-        colorResolverCanvas.width = 1;
-        colorResolverCanvas.height = 1;
-        colorResolverCtx = colorResolverCanvas.getContext('2d');
+      let l = parseFloat(lStr);
+      if (lStr.includes('%')) l /= 100;
+      
+      let c = parseFloat(cStr);
+      if (cStr.includes('%')) c /= 100;
+      
+      let h = parseFloat(hStr);
+      
+      let a = 1;
+      if (aStr) {
+        a = parseFloat(aStr);
+        if (aStr.includes('%')) a /= 100;
       }
-      if (colorResolverCtx) {
-        colorResolverCtx.fillStyle = trimmed;
-        const resolved = colorResolverCtx.fillStyle;
-        if (resolved && !resolved.includes('oklch') && !resolved.includes('oklab') && !resolved.includes('color-mix')) {
-          return resolved;
-        }
-      }
+      
+      return oklchToRgb(l, c, h, a);
     } catch (e) {
-      // ignore
+      return 'rgb(99, 102, 241)';
     }
-    return 'rgb(99, 102, 241)'; // Indigo fallback
-  }
-  return colorStr;
-};
-
-const sanitizeColorValue = (value: string): string => {
-  if (!value) return value;
-  // Regex needs to handle oklch, oklab, and potentially color-mix which can be nested or complex
-  // For color-mix specifically, for simplicity, we might just use the canvas parser.
-  if (!value.includes('oklch') && !value.includes('oklab') && !value.includes('color-mix')) return value;
-  
-  // This is a simplified replacement. If color-mix is complex, the canvas parser is the only reliable way.
-  return value.replace(/(oklch|oklab|color-mix)\([^)]+\)/g, (match) => {
-    return resolveColorToRgb(match);
   });
 };
 
-// ... existing code ...
-// Helper to convert QR SVG element to Image
-const qrSvgToImage = async (svg: SVGSVGElement): Promise<HTMLImageElement> => {
-  const canvas = document.createElement('canvas');
-  const serializer = new XMLSerializer();
-  const source = serializer.serializeToString(svg);
-  const img = new Image();
-  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(source);
-  await new Promise((resolve, reject) => {
-    img.onload = resolve;
-    img.onerror = reject;
+const parseOklabExpression = (str: string): string => {
+  const oklabRegex = /oklab\(\s*([\d.%-]+)\s+([\d.%-]+)\s+([\d.%-]+)(?:\s*[\/,\s]\s*([\d.%]+))?\s*\)/gi;
+  return str.replace(oklabRegex, (match, lStr, aStr, bStr, alphaStr) => {
+    try {
+      let l = parseFloat(lStr);
+      if (lStr.includes('%')) l /= 100;
+      let a_ = parseFloat(aStr);
+      if (aStr.includes('%')) a_ /= 100;
+      let b_ = parseFloat(bStr);
+      if (bStr.includes('%')) b_ /= 100;
+      
+      let alpha = 1;
+      if (alphaStr) {
+        alpha = parseFloat(alphaStr);
+        if (alphaStr.includes('%')) alpha /= 100;
+      }
+      
+      const l_E = l + 0.3963377774 * a_ + 0.2158037573 * b_;
+      const m_E = l - 0.1055613458 * a_ - 0.0638541728 * b_;
+      const s_E = l - 0.0894841775 * a_ - 1.2914855378 * b_;
+      
+      const l_cube = l_E * l_E * l_E;
+      const m_cube = m_E * m_E * m_E;
+      const s_cube = s_E * s_E * s_E;
+      
+      const x = +4.0767416621 * l_cube - 3.3077115913 * m_cube + 0.2309699292 * s_cube;
+      const y = -1.2684380046 * l_cube + 2.6097574011 * m_cube - 0.3413193965 * s_cube;
+      const z = -0.0041960863 * l_cube - 0.7034186145 * m_cube + 1.7076146140 * s_cube;
+      
+      let r = +3.2404542 * x - 1.5371385 * y - 0.4985314 * z;
+      let g = -0.9692660 * x + 1.8760108 * y + 0.0415560 * z;
+      let b =  0.0556434 * x - 0.2040259 * y + 1.0572252 * z;
+      
+      const f = (val: number) => {
+        if (val <= 0.0031308) return 12.92 * val;
+        return 1.055 * Math.pow(val, 1 / 2.4) - 0.055;
+      };
+      
+      let R = Math.round(Math.max(0, Math.min(1, f(r))) * 255);
+      let G = Math.round(Math.max(0, Math.min(1, f(g))) * 255);
+      let B = Math.round(Math.max(0, Math.min(1, f(b))) * 255);
+      
+      if (alpha < 1) {
+        return `rgba(${R}, ${G}, ${B}, ${alpha})`;
+      }
+      return `rgb(${R}, ${G}, ${B})`;
+    } catch (e) {
+      return 'rgb(99, 102, 241)';
+    }
   });
-  canvas.width = svg.width.baseVal.value;
-  canvas.height = svg.height.baseVal.value;
-  canvas.getContext('2d')?.drawImage(img, 0, 0);
-  
-  const newImg = document.createElement('img');
-  newImg.src = canvas.toDataURL('image/png');
-  newImg.style.width = svg.style.width || (svg.width?.baseVal?.value ? svg.width.baseVal.value + 'px' : 'auto');
-  newImg.style.height = svg.style.height || (svg.height?.baseVal?.value ? svg.height.baseVal.value + 'px' : 'auto');
-  newImg.className = svg.className.baseVal;
-  return newImg;
 };
 
-// Traverse and sanitize DOM nodes for export
-const sanitizeCloneNode = async (node: HTMLElement): Promise<void> => {
-  // 1. Remove Classes to rely on inlined computed styles
-  node.removeAttribute('class');
+const parseColorMixExpression = (str: string): string => {
+  const colorMixRegex = /color-mix\(\s*in\s+srgb\s*,\s*([^,]+?)\s+(?:(\d+)%)?\s*,\s*([^,]+?)\s+(?:(\d+)%)?\s*\)/gi;
+  return str.replace(colorMixRegex, (match, col1, pct1, col2, pct2) => {
+    try {
+      const val1 = sanitizeAndResolveString(col1.trim());
+      const val2 = sanitizeAndResolveString(col2.trim());
+      const p1 = pct1 ? parseInt(pct1) : (pct2 ? 100 - parseInt(pct2) : 50);
+      const p2 = 100 - p1;
+      
+      const parseColorChannels = (col: string) => {
+        const rgbMatch = col.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)/i);
+        if (rgbMatch) {
+          return {
+            r: parseInt(rgbMatch[1]),
+            g: parseInt(rgbMatch[2]),
+            b: parseInt(rgbMatch[3]),
+            a: rgbMatch[4] ? parseFloat(rgbMatch[4]) : 1
+          };
+        }
+        if (col.startsWith('#')) {
+          const hex = col.substring(1);
+          if (hex.length === 3) {
+            return {
+              r: parseInt(hex[0] + hex[0], 16),
+              g: parseInt(hex[1] + hex[1], 16),
+              b: parseInt(hex[2] + hex[2], 16),
+              a: 1
+            };
+          }
+          if (hex.length === 6 || hex.length === 8) {
+            return {
+              r: parseInt(hex.substring(0, 2), 16),
+              g: parseInt(hex.substring(2, 4), 16),
+              b: parseInt(hex.substring(4, 6), 16),
+              a: hex.length === 8 ? parseInt(hex.substring(6, 8), 16) / 255 : 1
+            };
+          }
+        }
+        if (col.toLowerCase() === 'transparent') {
+          return { r: 0, g: 0, b: 0, a: 0 };
+        }
+        if (col.toLowerCase() === 'white') return { r: 255, g: 255, b: 255, a: 1 };
+        if (col.toLowerCase() === 'black') return { r: 0, g: 0, b: 0, a: 1 };
+        return { r: 11, g: 16, b: 30, a: 1 };
+      };
 
-  // 2. Inline all computed styles, replacing problematic functions
-  const computed = window.getComputedStyle(node);
-  for (let i = 0; i < computed.length; i++) {
-    const prop = computed.item(i);
-    const val = computed.getPropertyValue(prop);
+      const c1 = parseColorChannels(val1);
+      const c2 = parseColorChannels(val2);
+      
+      const mixedR = Math.round((c1.r * p1 + c2.r * p2) / 100);
+      const mixedG = Math.round((c1.g * p1 + c2.g * p2) / 100);
+      const mixedB = Math.round((c1.b * p1 + c2.b * p2) / 100);
+      const mixedA = parseFloat(((c1.a * p1 + c2.a * p2) / 100).toFixed(3));
+      
+      if (mixedA < 1) {
+        return `rgba(${mixedR}, ${mixedG}, ${mixedB}, ${mixedA})`;
+      }
+      return `rgb(${mixedR}, ${mixedG}, ${mixedB})`;
+    } catch (e) {
+      return 'rgb(99, 102, 241)';
+    }
+  });
+};
+
+const resolveColorToRgb = (colorStr: string): string => colorStr;
+
+const sanitizeAndResolveString = (str: string): string => {
+  if (!str) return str;
+  let resolved = str;
+  
+  let previous = '';
+  let iterations = 0;
+  while (
+    (resolved.includes('oklch') || resolved.includes('oklab') || resolved.includes('color-mix')) && 
+    resolved !== previous && 
+    iterations < 5
+  ) {
+    previous = resolved;
+    iterations++;
     
-    // Check for problematic functions
-    if (val.includes('oklch') || val.includes('oklab') || val.includes('color-mix') || val.includes('gradient')) {
-        node.style.setProperty(prop, sanitizeColorValue(val));
-    } else {
-        node.style.setProperty(prop, val);
+    if (resolved.includes('oklch')) {
+      resolved = parseOklchExpression(resolved);
+    }
+    if (resolved.includes('oklab')) {
+      resolved = parseOklabExpression(resolved);
+    }
+    if (resolved.includes('color-mix')) {
+      resolved = parseColorMixExpression(resolved);
     }
   }
-
-  // 3. Handle Images CORS and replacements
-  if (node.tagName === 'IMG') {
-    const img = node as HTMLImageElement;
-    img.crossOrigin = 'anonymous';
-    img.onerror = () => {
-        img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93dXcudzMub3JnLzIwMDAvc3ZnIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0Ij0iMTAwIiBmaWxsPSIjY2NjIi8+PHRleHQgeD0iNTAiIHk9IjUwIiBmb250LXNpemU9IjEwIiBmaWxsPSIjNjY2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5pbWcgPzwvdGV4dD48L3N2Zz4=';
-    };
-  }
-
-  // 4. Convert QR SVGs
-  if (node.tagName === 'SVG' && (node.querySelector('path') || node.classList.contains('qrcode'))) {
-    const img = await qrSvgToImage(node as unknown as SVGSVGElement);
-    node.parentNode?.replaceChild(img, node);
-  } else {
-    // 5. Recurse children
-    const children = Array.from(node.children) as HTMLElement[];
-    for (const child of children) {
-       await sanitizeCloneNode(child);
-    }
-  }
+  
+  return resolved;
 };
-
-const ExportInvoiceComponent = ({ operation, invoiceNumber, data }: any) => {
-  const { lang, dir } = useLanguage();
-  return (
-    <div 
-      id="elkholy-export-document-capture" 
-      className="bg-white w-[794px] h-[1123px] p-[40px] text-black font-sans relative"
-      dir={dir}
-      style={{
-        direction: dir,
-        textAlign: dir === 'rtl' ? 'right' : 'left',
-      }}
-    >
-        {/* Company Header */}
-        <div className="flex justify-between items-start border-b-2 border-black pb-5">
-            <div>
-                <h1 className="text-3xl font-bold">ElKholy Motors</h1>
-                <p className="text-sm">Premium Fleet & Accessories</p>
-                <p className="text-sm">Cairo, Egypt</p>
-            </div>
-            <div className="text-right">
-                <div className="text-xl font-bold">INVOICE</div>
-                <div>#: {invoiceNumber}</div>
-                <div>Op ID: #{operation.id.substring(0,8).toUpperCase()}</div>
-                <div>Date: {new Date().toLocaleDateString()}</div>
-            </div>
-        </div>
-
-        {/* Customer Details */}
-        <div className="mt-8 grid grid-cols-2 gap-4 border-b border-gray-300 pb-5">
-            <div><strong className="block text-gray-600">Bill To:</strong> {data.name}</div>
-            <div className="text-right"><strong className="block text-gray-600">Contact:</strong> {data.phone}</div>
-        </div>
-        
-        {/* Items Table */}
-        <div className="mt-8">
-            <table className="w-full border-collapse">
-                <thead>
-                    <tr className="border-b-2 border-black text-left">
-                        <th className="py-2">Description</th>
-                        <th className="py-2 text-right">Qty</th>
-                        <th className="py-2 text-right">Price</th>
-                        <th className="py-2 text-right">Total</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {/* Placeholder for items - in a real scenario, map from operation data */}
-                    <tr>
-                        <td className="py-2">Item Placeholder</td>
-                        <td className="py-2 text-right">1</td>
-                        <td className="py-2 text-right">0 EGP</td>
-                        <td className="py-2 text-right">0 EGP</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        {/* Totals */}
-        <div className="mt-8 flex justify-end">
-            <div className="w-64 space-y-2">
-                <div className="flex justify-between"><span>Subtotal:</span><strong>0 EGP</strong></div>
-                <div className="flex justify-between border-t border-black pt-2 font-bold text-lg"><span>Total:</span><strong>0 EGP</strong></div>
-            </div>
-        </div>
-        
-        {/* Footer */}
-        <div className="absolute bottom-[40px] w-[calc(100%-80px)] border-t border-black pt-4 text-center text-sm">
-            Thank you for your business!
-        </div>
-    </div>
-  );
-};
-
 
 interface AdminPanelProps {
   onClose: () => void;
@@ -243,7 +277,17 @@ export default function AdminPanel({
   const { lang, dir, t } = useLanguage();
 
   // Authentication & Core Session State
-  const [sessionUser, setSessionUser] = useState<UserAccount | null>(() => {
+  
+  const invoicePrintRef = useRef<HTMLDivElement>(null);
+    
+  const handleOpenInvoicePage = () => {
+    if (!selectedOperation) return;
+    const url = `/invoice/${selectedOperation.id}`;
+    window.open(url, '_blank');
+  };
+
+
+const [sessionUser, setSessionUser] = useState<UserAccount | null>(() => {
     const saved = localStorage.getItem('elkholy_session_user');
     return saved ? JSON.parse(saved) : null;
   });
@@ -425,6 +469,62 @@ export default function AdminPanel({
   const [deliveryMethod, setDeliveryMethod] = useState<'whatsapp' | 'email' | 'both'>('whatsapp');
   const [isSending, setIsSending] = useState(false);
 
+  // Live Export Test States
+  
+  const [isCapturingTest, setIsCapturingTest] = useState(false);
+
+  // Export Diagnostics Mode States
+  const [isDiagnosticsModalOpen, setIsDiagnosticsModalOpen] = useState(false);
+  const [diagnosticsRunning, setDiagnosticsRunning] = useState(false);
+  const [diagnosticsResults, setDiagnosticsResults] = useState<{
+    noImages: 'IDLE' | 'PASS' | 'FAIL';
+    noQR: 'IDLE' | 'PASS' | 'FAIL';
+    noCSS: 'IDLE' | 'PASS' | 'FAIL';
+    plainText: 'IDLE' | 'PASS' | 'FAIL';
+    noImagesErr?: string;
+    noQRErr?: string;
+    noCSSErr?: string;
+    plainTextErr?: string;
+    firstFailedPhase?: string;
+  }>({
+    noImages: 'IDLE',
+    noQR: 'IDLE',
+    noCSS: 'IDLE',
+    plainText: 'IDLE',
+  });
+
+  // Color Scanner States
+  const [isColorScanModalOpen, setIsColorScanModalOpen] = useState(false);
+  const [isColorScanning, setIsColorScanning] = useState(false);
+  const [colorScanResults, setColorScanResults] = useState<{
+    elementId: string;
+    tagName: string;
+    classes: string;
+    textPreview: string;
+    offendingProperties: {
+      property: string;
+      value: string;
+    }[];
+  }[]>([]);
+
+  // Comparison & Export DOM Snapshot States
+  const [isComparisonModalOpen, setIsComparisonModalOpen] = useState(false);
+  const [comparisonCanvasUrl, setComparisonCanvasUrl] = useState<string | null>(null);
+  const [comparisonCanvasWidth, setComparisonCanvasWidth] = useState<number>(0);
+  const [comparisonCanvasHeight, setComparisonCanvasHeight] = useState<number>(0);
+  const [snapshotReport, setSnapshotReport] = useState<{
+    liveElementCount: number;
+    cloneElementCount: number;
+    unsupportedCssCount: number;
+    transformCount: number;
+    opacityCount: number;
+    filterCount: number;
+    backdropFilterCount: number;
+    missingElements: Array<{ tag: string; classes: string }>;
+    diagnosticsDone: boolean;
+  } | null>(null);
+  const [pendingExportAction, setPendingExportAction] = useState<'PDF' | 'PNG' | 'PRINT' | 'SNAPSHOT_ONLY' | null>(null);
+
   const [editSelectedProducts, setEditSelectedProducts] = useState<any[]>([]); // { product: StoreProduct, quantity: number }
   const [editActivityLog, setEditActivityLog] = useState<any[]>([]);
   const [editTimeline, setEditTimeline] = useState<any[]>([]);
@@ -547,190 +647,6 @@ export default function AdminPanel({
     }
   };
 
-  const compileInvoiceCanvas = async (): Promise<HTMLCanvasElement> => {
-    // 1. Create a dedicated container for the export
-    const exportRootElement = document.createElement("div");
-    exportRootElement.id = "elkholy-export-root";
-    // Ensure it's off-screen and doesn't affect page layout
-    exportRootElement.style.position = 'absolute';
-    exportRootElement.style.left = '-9999px';
-    exportRootElement.style.top = '-9999px';
-    
-    document.body.appendChild(exportRootElement);
-
-    // 2. Render the ExportInvoiceComponent
-    const root = createRoot(exportRootElement);
-    
-    // We need to pass necessary state or create a wrapper that has access
-    root.render(
-        <ExportInvoiceComponent 
-            operation={selectedOperation} 
-            invoiceNumber={editInvoiceNumber} 
-            data={{ 
-                name: editCustomerName, 
-                phone: editCustomerPhone 
-            }}
-        />
-    );
-    
-    // Wait for render
-    await new Promise(r => setTimeout(r, 100));
-
-    // 3. Capture
-    const element = document.getElementById('elkholy-export-document-capture');
-    if (!element) {
-        root.unmount();
-        exportRootElement.remove();
-        throw new Error('Export invoice container not found.');
-    }
-
-    try {
-      const canvas = await html2canvas(element, {
-        backgroundColor: '#FFFFFF',
-        useCORS: true,
-        scale: 3,
-        logging: true,
-      });
-      console.log('html2canvas capture success');
-      return canvas;
-    } catch (err) {
-        console.error('html2canvas capture failed:', err);
-        throw err;
-    } finally {
-      // 4. Cleanup
-      root.unmount();
-      exportRootElement.remove();
-    }
-  };
-
-  const handlePrintInvoice = () => {
-    const original = document.getElementById('elkholy-printable-invoice');
-    if (!original) {
-      fireToast(
-        lang === 'ar' 
-          ? '⚠️ لم يتم العثور على وثيقة الطباعة A4 المخصصة' 
-          : '⚠️ Printer layout mapping error: #elkholy-printable-invoice element is missing', 
-        'error'
-      );
-      return;
-    }
-
-    // Clone element to document.body to avoid parent modal bounds clipping or hidden wrappers
-    const clone = original.cloneNode(true) as HTMLElement;
-    clone.id = 'elkholy-printable-invoice-clone';
-    // Remove "hidden print:block" classes to enable correct styles mapping
-    clone.className = 'text-black bg-white p-10 font-sans leading-relaxed text-[12.5px] text-right';
-
-    // Inject dedicated printing stylesheet
-    const printStyle = document.createElement('style');
-    printStyle.id = 'print-a4-temp-style';
-    printStyle.textContent = `
-      @media print {
-        body * {
-          display: none !important;
-        }
-        #elkholy-printable-invoice-clone, #elkholy-printable-invoice-clone * {
-          display: block !important;
-          visibility: visible !important;
-        }
-        #elkholy-printable-invoice-clone {
-          position: absolute !important;
-          left: 0 !important;
-          top: 0 !important;
-          width: 210mm !important;
-          min-height: 297mm !important;
-          background: white !important;
-          color: black !important;
-          padding: 20mm 15mm !important;
-          box-sizing: border-box !important;
-          direction: ${dir} !important;
-          font-family: system-ui, -apple-system, sans-serif !important;
-        }
-        @page {
-          size: A4;
-          margin: 0;
-        }
-      }
-    `;
-
-    document.head.appendChild(printStyle);
-    document.body.appendChild(clone);
-
-    // Open System print dialog
-    window.print();
-
-    // Clean up temporary elements to prevent DOM bloat
-    setTimeout(() => {
-      clone.remove();
-      printStyle.remove();
-    }, 1500);
-  };
-
-  const handleDownloadPDF = async () => {
-    try {
-      console.log('Initiating PDF export...');
-      fireToast('⏳ توليد PDF...', 'info');
-      
-      const canvas = await compileInvoiceCanvas();
-      console.log('Canvas captured for PDF');
-      
-      // Compress canvas output to a high-density JPEG representation
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      
-      const pdf = new jsPDF({
-        orientation: 'p',
-        unit: 'mm',
-        format: 'a4'
-      });
-      
-      const pdfWidth = pdf.internal.pageSize.getWidth(); // 210
-      const pdfHeight = pdf.internal.pageSize.getHeight(); // 297
-
-      // Compute visual dimensions keeping aspect ratio intact
-      const ratio = canvas.width / canvas.height;
-      let printWidth = pdfWidth;
-      let printHeight = pdfWidth / ratio;
-
-      // Fit gracefully onto a single premium A4 leaf sheet
-      if (printHeight > pdfHeight) {
-        printHeight = pdfHeight;
-        printWidth = pdfHeight * ratio;
-      }
-
-      const xOffset = (pdfWidth - printWidth) / 2;
-      const yOffset = (pdfHeight - printHeight) / 2;
-
-      pdf.addImage(imgData, 'JPEG', xOffset, yOffset, printWidth, printHeight);
-      pdf.save(`Invoice_${editInvoiceNumber || selectedOperation?.id || 'Pre'}.pdf`);
-
-      console.log('PDF saved successfully');
-      fireToast('✅ تم تحميل PDF!', 'success');
-    } catch (err: any) {
-      console.error('PDF Generation Crash Report:', err);
-      fireToast(`❌ فشل PDF: ${err.message}`, 'error');
-    }
-  };
-
-  const handleDownloadPNG = async () => {
-    try {
-      console.log('Initiating PNG export...');
-      fireToast('⏳ توليد PNG...', 'info');
-      
-      const canvas = await compileInvoiceCanvas();
-      console.log('Canvas captured for PNG');
-      
-      const link = document.createElement('a');
-      link.download = `Invoice_${editInvoiceNumber || selectedOperation?.id || 'Pre'}.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-
-      console.log('PNG saved successfully');
-      fireToast('✅ تم تحميل PNG!', 'success');
-    } catch (err: any) {
-      console.error('PNG Capture Crash Report:', err);
-      fireToast(`❌ فشل PNG: ${err.message}`, 'error');
-    }
-  };
 
   const handleSendInvoice = (method: 'whatsapp' | 'email' | 'both') => {
     if (sessionUser?.role === 'Staff') {
@@ -780,6 +696,21 @@ export default function AdminPanel({
       await setDoc(doc(db, 'bookings', selectedOperation.id), updatedBooking, { merge: true });
     } catch (err) {
       console.warn("Unable to sync booking update in Firestore:", err);
+    }
+    
+    if (deliveryMethod === 'whatsapp' || deliveryMethod === 'both') {
+       if (editCustomerPhone) {
+         let wPhone = editCustomerPhone.replace(/\s/g, '');
+         if (wPhone.startsWith('0')) wPhone = '+2' + wPhone; // Egyptian number fallback
+         const wMessage = lang === 'ar' 
+            ? `مرحباً بك في الخولي موتورز! الفاتورة في المرفقات الخاصة بك.` 
+            : `Welcome to ElKholy Motors! Here is your invoice.`;
+         
+         
+         window.open(`https://wa.me/${wPhone.replace('+', '')}?text=${encodeURIComponent(wMessage)}`, '_blank');
+       } else {
+         fireToast(lang === 'ar' ? '⚠️ لم يتم العثور على رقم هاتف لإرسال الواتساب.' : '⚠️ No phone number found for WhatsApp.', 'info');
+       }
     }
 
     setIsSending(false);
@@ -3542,8 +3473,8 @@ APP_URL="MY_APP_URL"`
                           </div>
 
                           {/* Chart */}
-                          <div className="h-40 w-full mb-4">
-                            <Recharts.ResponsiveContainer>
+                          <div className="min-h-[160px] w-full mb-4">
+                            <Recharts.ResponsiveContainer width="100%" height="100%">
                               <Recharts.PieChart>
                                 <Recharts.Pie
                                   data={vehicleCategoryStats.breakdown}
@@ -3696,8 +3627,8 @@ APP_URL="MY_APP_URL"`
                           </div>
 
                           {/* Chart */}
-                          <div className="h-40 w-full mb-4">
-                            <Recharts.ResponsiveContainer>
+                          <div className="min-h-[160px] w-full mb-4">
+                            <Recharts.ResponsiveContainer width="100%" height="100%">
                               <Recharts.PieChart>
                                 <Recharts.Pie
                                   data={storeCategoryStats.breakdown}
@@ -6163,7 +6094,7 @@ APP_URL="MY_APP_URL"`
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                                   <button
                                     type="button"
-                                    onClick={handlePrintInvoice}
+                                    onClick={handleOpenInvoicePage}
                                     className="w-full flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-gray-800 to-gray-750 hover:from-white hover:to-white text-gray-200 hover:text-black font-mono font-bold text-[9.5px] sm:text-[10px] uppercase tracking-wider border border-white/10 cursor-pointer shadow-md transition-all active:scale-97"
                                   >
                                     <Printer className="w-4 h-4" />
@@ -6784,7 +6715,7 @@ APP_URL="MY_APP_URL"`
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => setIsInvoiceFullScreen(!isInvoiceFullScreen)}
-                        className="p-1 px-2.5 rounded-md border border-white/10 hover:border-indigo-400 bg-white/5 text-gray-400 hover:text-indigo-400 transition-all text-xs flex items-center gap-1 font-mono cursor-pointer"
+                        className={`p-1 px-2.5 rounded-md border border-white/10 hover:border-indigo-400 bg-white/5 text-gray-400 hover:text-indigo-400 transition-all text-xs flex items-center gap-1 cursor-pointer ${lang === 'ar' ? 'font-sans' : 'font-mono'}`}
                         title={lang === 'ar' ? 'ملء الشاشة' : 'Toggle Fullscreen'}
                       >
                         {isInvoiceFullScreen ? (
@@ -6802,14 +6733,14 @@ APP_URL="MY_APP_URL"`
                     </div>
 
                     <div className="text-center flex-1">
-                      <h3 className="text-xs sm:text-sm font-black font-mono tracking-wider text-yellow-500 uppercase flex items-center justify-center gap-2">
+                      <h3 className={`text-xs sm:text-sm font-black text-yellow-500 uppercase flex items-center justify-center gap-2 ${lang === 'ar' ? 'font-sans' : 'font-mono tracking-wider'}`}>
                         <span>{lang === 'ar' ? '👁 معاينة الفاتورة المعتمدة' : '👁 APPROVED INVOICE PREVIEW'}</span>
                       </h3>
                     </div>
 
                     <button
                       onClick={() => setIsInvoicePreviewOpen(false)}
-                      className="p-1 px-2.5 rounded-md border border-red-500/20 hover:border-red-500 hover:bg-red-500/15 text-red-400 hover:text-red-300 transition-all text-xs flex items-center gap-1 font-mono cursor-pointer"
+                      className={`p-1 px-2.5 rounded-md border border-red-500/20 hover:border-red-500 hover:bg-red-500/15 text-red-400 hover:text-red-300 transition-all text-xs flex items-center gap-1 cursor-pointer ${lang === 'ar' ? 'font-sans' : 'font-mono'}`}
                     >
                       <X className="w-4 h-4" />
                       <span>{lang === 'ar' ? 'إغلاق' : 'Close'}</span>
@@ -6890,7 +6821,7 @@ APP_URL="MY_APP_URL"`
 
                         {/* CUSTOMER INFO SUMMARY */}
                         <div className="p-4 rounded-xl bg-black/20 border border-white/[0.04] space-y-2.5 text-right">
-                          <h4 className="text-[10px] font-black tracking-wider text-gray-500 border-b border-white/5 pb-1 uppercase">
+                          <h4 className={`text-[10px] font-black text-gray-500 border-b border-white/5 pb-1 uppercase ${lang === 'ar' ? 'font-sans' : 'font-mono tracking-wider'}`}>
                             👥 {lang === 'ar' ? 'بيانات العميل الحصري' : 'CUSTOMER DOSSIER'}
                           </h4>
                           <div className="grid grid-cols-2 gap-4 text-xs">
@@ -6916,7 +6847,7 @@ APP_URL="MY_APP_URL"`
                         {/* MOTORCYCLE ATTACHED INFORMATION */}
                         {selectedOperation.motorcycleId && (
                           <div className="p-4 rounded-xl bg-indigo-600/5 border border-indigo-500/10 space-y-3">
-                            <h4 className="text-[10px] font-black tracking-wider text-indigo-400 border-b border-indigo-500/5 pb-1 uppercase">
+                            <h4 className={`text-[10px] font-black text-indigo-400 border-b border-indigo-500/5 pb-1 uppercase ${lang === 'ar' ? 'font-sans' : 'font-mono tracking-wider'}`}>
                               🏍 {lang === 'ar' ? 'دراجة المعرض المشتراة' : 'CYCLE SPECIFICATIONS & FLEET DETS'}
                             </h4>
 
@@ -6962,7 +6893,7 @@ APP_URL="MY_APP_URL"`
                         {/* STORE PRODUCT ACCESSORIES LIST */}
                         {editSelectedProducts.length > 0 && (
                           <div className="space-y-2">
-                            <h4 className="text-[10px] font-black tracking-wider text-[#22D3EE] border-b border-[#22D3EE]/10 pb-1 uppercase">
+                            <h4 className={`text-[10px] font-black text-[#22D3EE] border-b border-[#22D3EE]/10 pb-1 uppercase ${lang === 'ar' ? 'font-sans' : 'font-mono tracking-wider'}`}>
                               📦 {lang === 'ar' ? 'الملحقات والإكسسوارات المشمولة' : 'ACCESSORIES & STORE PRODUCTS'}
                             </h4>
                             <div className="overflow-x-auto">
@@ -7100,7 +7031,7 @@ APP_URL="MY_APP_URL"`
                       
                       <div className="space-y-4">
                         <div>
-                          <h4 className="text-xs font-black font-mono tracking-wider text-gray-400 uppercase border-b border-white/5 pb-1 mb-2">
+                          <h4 className={`text-xs font-black text-gray-400 uppercase border-b border-white/5 pb-1 mb-2 ${lang === 'ar' ? 'font-sans' : 'font-mono tracking-wider'}`}>
                             {lang === 'ar' ? '⚙️ إجراءات الفاتورة' : '⚙️ PREVIEW ACTIONS'}
                           </h4>
                           <span className="text-[10px] text-gray-500 block">
@@ -7111,7 +7042,7 @@ APP_URL="MY_APP_URL"`
                         <div className="space-y-2.5">
                           {/* Print action and download actions */}
                           <button
-                            onClick={handleDownloadPDF}
+                            onClick={handleOpenInvoicePage}
                             className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-gradient-to-r from-red-600/20 to-red-500/10 hover:from-red-600/30 text-red-400 border border-red-500/20 font-sans font-bold text-xs cursor-pointer shadow transition-all active:scale-97"
                           >
                             <span className="font-mono text-[10px]">SAVE AS PDF (A4)</span>
@@ -7122,7 +7053,7 @@ APP_URL="MY_APP_URL"`
                           </button>
 
                           <button
-                            onClick={handleDownloadPNG}
+                            onClick={handleOpenInvoicePage}
                             className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-gradient-to-r from-[#22D3EE]/20 to-[#22D3EE]/10 hover:from-[#22D3EE]/30 text-[#22D3EE] border border-cyan-500/20 font-sans font-bold text-xs cursor-pointer shadow transition-all active:scale-97"
                           >
                             <span className="font-mono text-[10px]">HIGH RESOLUTION PNG</span>
@@ -7133,7 +7064,7 @@ APP_URL="MY_APP_URL"`
                           </button>
 
                           <button
-                            onClick={handlePrintInvoice}
+                            onClick={handleOpenInvoicePage}
                             className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-gradient-to-r from-gray-800 to-gray-750 hover:bg-white hover:text-black hover:from-white hover:to-white text-gray-200 border border-white/10 font-sans font-bold text-xs cursor-pointer shadow transition-all active:scale-97"
                           >
                             <span className="font-mono text-[10px]">PAPER PRINTER (A4)</span>
@@ -7145,7 +7076,7 @@ APP_URL="MY_APP_URL"`
                         </div>
 
                         <div className="border-t border-white/5 pt-3 space-y-2.5">
-                          <h5 className="text-[10px] font-bold font-mono text-gray-400 uppercase">
+                          <h5 className={`text-[10px] font-bold text-gray-400 uppercase ${lang === 'ar' ? 'font-sans' : 'font-mono'}`}>
                             📲 {lang === 'ar' ? 'خيارات الإرسال والتسليم المباشر' : 'SEND & CUSTOMER DELIVERY:'}
                           </h5>
 
@@ -7208,6 +7139,20 @@ APP_URL="MY_APP_URL"`
 
               </motion.div>
             )}
+          </AnimatePresence>
+
+          
+
+          {/* ================================== EXPORT SYSTEM DIAGNOSTICS DIALOG ================================== */}
+          <AnimatePresence>
+          </AnimatePresence>
+
+          {/* ================================== EXPORT COLOR SPACE SCANNER DIALOG ================================== */}
+          <AnimatePresence>
+          </AnimatePresence>
+
+          {/* ================================== ELKHOLY MOTORS SCREENSHOT COMPARISON & DOM SNAPSHOT AUDIT DIALOG ================================== */}
+          <AnimatePresence>
           </AnimatePresence>
 
           {/* ================================== CUSTOMER DELIVERY PREVIEW CONFIRMATION DIALOG ================================== */}
@@ -7305,7 +7250,9 @@ APP_URL="MY_APP_URL"`
         </div>
 
       </motion.div>
-    </div>
+    
+      
+</div>
   );
 }
 

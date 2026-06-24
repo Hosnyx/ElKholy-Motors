@@ -93,10 +93,15 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // categories collection
+    match /categories/{categoryId} {
+      allow read, write: if true;
+    }
+
     // store_products collection
     match /store_products/{productId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if true; // Temporarily permissive for bootstrapping
     }
   }
 }

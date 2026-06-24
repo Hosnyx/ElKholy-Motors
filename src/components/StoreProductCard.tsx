@@ -151,6 +151,7 @@ Price: ${formattedPrice}`;
               src={product.image} 
               referrerPolicy="no-referrer"
               alt={lang === 'ar' ? product.nameAr : product.name}
+              onError={(e: any) => { e.target.src = 'https://images.unsplash.com/photo-1599819811279-d5ad9cccf838?auto=format&fit=crop&q=80&w=200'; }}
               className="w-full h-full object-contain filter drop-shadow-[0_12px_12px_rgba(0,0,0,0.5)] group-hover:scale-105 transition-transform duration-500 select-none pb-1"
             />
           </div>

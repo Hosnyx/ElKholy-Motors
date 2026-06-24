@@ -19,6 +19,7 @@ import ContactFooter from './components/ContactFooter';
 import AdminPanel from './components/AdminPanel';
 import StoreView from './components/StoreView';
 import CartDrawer from './components/CartDrawer';
+import InvoiceLandingPage from './components/InvoiceLandingPage';
 
 import { Motorcycle, CategorySlug, FilterState, BookingData, HomepageConfig } from './types';
 import { MOTORCYCLES_DATA, HERO_BG_IMAGE, DEFAULT_HOMEPAGE_CONFIG } from './data';
@@ -29,6 +30,14 @@ import { collection, doc, getDocs, setDoc, getDoc, deleteDoc, writeBatch } from 
 
 export default function App() {
   const { lang, dir, t } = useLanguage();
+
+  // Simple Router Check for Standalone Print views
+  const path = window.location.pathname;
+  if (path.startsWith('/invoice/')) {
+     const parts = path.split('/');
+     const invoiceId = parts[2];
+     return <InvoiceLandingPage invoiceId={invoiceId} />;
+  }
 
   const formatAppPrice = (num: number) => {
     return lang === 'ar' ? `${num.toLocaleString()} جنيه` : `${num.toLocaleString()} EGP`;

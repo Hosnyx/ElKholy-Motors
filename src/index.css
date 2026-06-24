@@ -97,6 +97,20 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
+@page {
+  size: A4;
+  margin: 10mm;
+}
+
+@media print {
+  #invoice-print-root {
+    background: white !important;
+    color: black !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;
